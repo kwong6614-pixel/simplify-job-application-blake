@@ -5,6 +5,8 @@ const extensionTokenInput = document.getElementById("extensionToken") as HTMLInp
 const saveSettingsButton = document.getElementById("saveSettings") as HTMLButtonElement;
 const connectionStatus = document.getElementById("connectionStatus") as HTMLParagraphElement;
 const fillButton = document.getElementById("fillButton") as HTMLButtonElement;
+const fillLoading = document.getElementById("fillLoading") as HTMLDivElement;
+const fillLoadingText = document.getElementById("fillLoadingText") as HTMLSpanElement;
 const jobMatch = document.getElementById("jobMatch") as HTMLParagraphElement;
 const fieldCount = document.getElementById("fieldCount") as HTMLParagraphElement;
 const message = document.getElementById("message") as HTMLParagraphElement;
@@ -66,6 +68,8 @@ async function getThisTabState(): Promise<{ tabId: number; state: TabState | nul
 }
 
 function renderState(state: TabState | null, errorMessage?: string | null) {
+  setFillLoading(false);
+
   if (errorMessage) {
     jobMatch.textContent = errorMessage;
     fieldCount.textContent = "";
@@ -102,6 +106,15 @@ function renderState(state: TabState | null, errorMessage?: string | null) {
   fillButton.disabled = !ready;
 }
 
+function setFillLoading(loading: boolean, step = "Filling this tab...") {
+  fillLoadingText.textContent = step;
+  fillLoading.classList.toggle("hidden", !loading);
+  fillButton.classList.toggle("hidden", loading);
+  if (!loading) {
+    message.textContent = "";
+  }
+}
+
 async function refresh() {
   try {
     const tabInfo = await getThisTabState();
@@ -122,20 +135,25 @@ async function refresh() {
 }
 
 fillButton.addEventListener("click", async () => {
-  message.textContent = "Filling this tab...";
+  setFillLoading(true, "Generating answers from your profile...");
   fillButton.disabled = true;
 
   const tabInfo = await getThisTabState();
   if (!tabInfo) {
+    setFillLoading(false);
     message.textContent = "No active tab.";
     await refresh();
     return;
   }
 
+  setFillLoading(true, "Filling application fields...");
+
   const response = await chrome.runtime.sendMessage({
     type: "FILL_TAB",
     tabId: tabInfo.tabId,
   });
+
+  setFillLoading(false);
 
   if (response?.error) {
     message.textContent = response.error;

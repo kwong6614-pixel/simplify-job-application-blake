@@ -12,6 +12,7 @@ import {
   hideReadyPanel,
   setReadyPanelFilling,
 } from "./ready-panel";
+import { hideFillLoading, showFillLoading, updateFillLoading } from "./fill-loading";
 
 let publishTimer: number | undefined;
 let fillInProgress = false;
@@ -76,9 +77,32 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return false;
   }
 
+  if (message.type === "SHOW_FILL_LOADING") {
+    showFillLoading(
+      typeof message.step === "string" ? message.step : "Preparing to fill application...",
+    );
+    sendResponse({ ok: true });
+    return true;
+  }
+
+  if (message.type === "UPDATE_FILL_LOADING") {
+    updateFillLoading(
+      typeof message.step === "string" ? message.step : "Filling application fields...",
+    );
+    sendResponse({ ok: true });
+    return true;
+  }
+
+  if (message.type === "HIDE_FILL_LOADING") {
+    hideFillLoading();
+    sendResponse({ ok: true });
+    return true;
+  }
+
   if (message.type === "APPLY_FILL") {
     fillInProgress = true;
     setReadyPanelFilling(true);
+    updateFillLoading("Filling application fields...");
     void applyFill(
       message.values as Record<string, string>,
       (message.fields as FormField[] | undefined) ?? [],
@@ -92,6 +116,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       .finally(() => {
         fillInProgress = false;
         setReadyPanelFilling(false);
+        hideFillLoading();
         schedulePublish();
       });
     return true;

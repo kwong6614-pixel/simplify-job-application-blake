@@ -132,6 +132,22 @@ function setTabEnabled(tabId: number, enabled: boolean) {
   }
 }
 
+async function notifyFillLoading(tabId: number, step: string) {
+  try {
+    await chrome.tabs.sendMessage(tabId, { type: "UPDATE_FILL_LOADING", step });
+  } catch {
+    // Content script not available on this page yet.
+  }
+}
+
+async function hideFillLoadingOnTab(tabId: number) {
+  try {
+    await chrome.tabs.sendMessage(tabId, { type: "HIDE_FILL_LOADING" });
+  } catch {
+    // Content script not available on this page yet.
+  }
+}
+
 async function fillTab(tabId: number) {
   const state = tabStates.get(tabId);
   if (!isTabReady(state)) {
@@ -147,20 +163,31 @@ async function fillTab(tabId: number) {
 
   fillsInFlight.add(tabId);
   try {
+    await notifyFillLoading(tabId, "Generating answers from your profile...");
     const result = await apiFetch("/api/fill/generate", {
       method: "POST",
       body: JSON.stringify({ url: state.url, fields: state.fields }),
     });
 
-    await chrome.tabs.sendMessage(tabId, {
+    await notifyFillLoading(tabId, "Filling application fields...");
+    const applyResponse = await chrome.tabs.sendMessage(tabId, {
       type: "APPLY_FILL",
       values: result.values,
       fields: state.fields,
     });
 
+    if (applyResponse?.error) {
+      return { error: applyResponse.error as string };
+    }
+
     return { ok: true, unmatchedFieldIds: result.unmatchedFieldIds ?? [] };
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "Fill failed. Check extension connection.",
+    };
   } finally {
     fillsInFlight.delete(tabId);
+    await hideFillLoadingOnTab(tabId);
   }
 }
 

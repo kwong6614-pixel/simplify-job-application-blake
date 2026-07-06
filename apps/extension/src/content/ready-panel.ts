@@ -1,4 +1,5 @@
 import type { TabReadyPayload } from "../shared/messages";
+import { showFillLoading } from "./fill-loading";
 
 const PANEL_HOST_ID = "jobapply-ready-panel-host";
 
@@ -24,10 +25,13 @@ export function hideReadyPanel() {
 export function setReadyPanelFilling(inProgress: boolean) {
   fillInProgress = inProgress;
   const button = document.querySelector<HTMLButtonElement>("[data-jobapply-fill]");
-  if (button) {
-    button.disabled = inProgress;
-    button.textContent = inProgress ? "Filling..." : "Fill application";
-  }
+  if (!button) return;
+
+  button.disabled = inProgress;
+  button.classList.toggle("loading", inProgress);
+  button.innerHTML = inProgress
+    ? '<span class="fill-spinner" aria-hidden="true"></span><span>Filling...</span>'
+    : "Fill application";
 }
 
 export function showReadyPanel(state: TabReadyPayload) {
@@ -106,6 +110,23 @@ export function showReadyPanel(state: TabReadyPayload) {
       opacity: 0.55;
       cursor: not-allowed;
     }
+    .fill.loading {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .fill-spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(255, 255, 255, 0.35);
+      border-top-color: #ffffff;
+      border-radius: 50%;
+      animation: jobapply-btn-spin 0.75s linear infinite;
+    }
+    @keyframes jobapply-btn-spin {
+      to { transform: rotate(360deg); }
+    }
     .status {
       margin: 10px 0 0;
       font-size: 12px;
@@ -152,6 +173,7 @@ async function fillFromPanel() {
 
   fillInProgress = true;
   setReadyPanelFilling(true);
+  showFillLoading("Generating answers from your profile...");
   setPanelMessage("Generating answers and filling fields...");
 
   try {

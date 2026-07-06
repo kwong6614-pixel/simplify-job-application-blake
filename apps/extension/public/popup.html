@@ -28,6 +28,10 @@
       </section>
 
       <button id="fillButton" type="button" disabled>Fill this tab</button>
+      <div id="fillLoading" class="fill-loading hidden" aria-live="polite">
+        <span class="fill-spinner" aria-hidden="true"></span>
+        <span id="fillLoadingText">Filling this tab...</span>
+      </div>
       <p id="message" class="message"></p>
     </main>
     <script type="module" src="/popup.js"></script>

@@ -79,6 +79,41 @@ button:disabled {
   color: #475569;
 }
 
+.fill-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 12px;
+  border-radius: 8px;
+  background: #eef2ff;
+  color: #3730a3;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.fill-loading.hidden,
+#fillButton.hidden {
+  display: none;
+}
+
+.fill-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid #c7d2fe;
+  border-top-color: #4f46e5;
+  border-radius: 50%;
+  animation: popup-spin 0.75s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes popup-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .status p {
   margin: 0 0 6px;
   font-size: 13px;
