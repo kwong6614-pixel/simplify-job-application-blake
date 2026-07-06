@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { signIn } from "next-auth/react";
+import { getSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useEffect, useState } from "react";
 import { getAuthErrorMessage } from "@/lib/auth/errors";
@@ -39,19 +39,21 @@ function LoginForm() {
     const password = String(formData.get("password"));
 
     try {
-      const result = await signIn("credentials", {
-        email,
-        password,
-        redirect: false,
-        callbackUrl: "/profile",
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
       });
 
-      if (!result || result.error || !result.ok) {
-        setError(getAuthErrorMessage(result?.error) ?? "Invalid email or password.");
+      const data = (await response.json()) as { error?: string; redirectTo?: string };
+
+      if (!response.ok) {
+        setError(data.error ?? "Invalid email or password.");
         return;
       }
 
-      router.push(result.url ?? "/profile");
+      await getSession();
+      router.push(data.redirectTo ?? "/profile");
       router.refresh();
     } catch {
       setError("Unable to sign in. Please try again.");

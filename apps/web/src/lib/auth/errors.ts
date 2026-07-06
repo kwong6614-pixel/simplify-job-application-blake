@@ -1,9 +1,3 @@
-import { CredentialsSignin } from "next-auth";
-
-export class InvalidCredentialsError extends CredentialsSignin {
-  code = "invalid_credentials";
-}
-
 export function getAuthErrorMessage(code: string | null | undefined): string | null {
   if (!code) return null;
 
