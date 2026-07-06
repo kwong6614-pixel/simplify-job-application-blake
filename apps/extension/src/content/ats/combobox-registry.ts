@@ -1,4 +1,4 @@
-export type ComboboxPlatform = "workday" | "ashby" | "greenhouse" | "generic";
+export type ComboboxPlatform = "workday" | "ashby" | "greenhouse" | "lever" | "generic";
 
 export interface ComboboxHandle {
   id: string;

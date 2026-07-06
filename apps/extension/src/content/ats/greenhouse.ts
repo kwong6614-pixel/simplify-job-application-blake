@@ -18,7 +18,11 @@ const FORM_SELECTORS = [
   ".application--container form",
   "#job_application",
   "form.greenhouse",
+  "form#job_application_form",
 ].join(", ");
+
+const FIELD_ROOT_SELECTORS =
+  ".field, .text, .select, .textarea, .checkbox, .question, fieldset, [data-field-id], .demographic_question";
 
 const SKIP_FIELD_SELECTORS = [
   "#resume",
@@ -33,13 +37,16 @@ const GREENHOUSE_COMBOBOX_SELECTORS = [
   'input[aria-haspopup="listbox"]',
   'button[aria-haspopup="listbox"]',
   ".select__container input",
+  '[role="combobox"]',
+  ".select button",
 ];
 
 function getGreenhouseLabel(fieldRoot: Element, control: HTMLElement): string {
   const labelEl =
     fieldRoot.querySelector("label") ??
     fieldRoot.querySelector(".label") ??
-    fieldRoot.querySelector(".field-label");
+    fieldRoot.querySelector(".field-label") ??
+    fieldRoot.querySelector("legend");
 
   if (labelEl?.textContent?.trim()) {
     return labelEl.textContent.replace(/\s+/g, " ").trim();
@@ -73,7 +80,7 @@ export const greenhouseAdapter: AtsAdapter = {
 
     if (!form) return [];
 
-    const fieldRoots = Array.from(form.querySelectorAll(".field, .text, .select"));
+    const fieldRoots = Array.from(form.querySelectorAll(FIELD_ROOT_SELECTORS));
     const fields = collectControlsFromRoots(fieldRoots, getGreenhouseLabel, shouldSkipRoot);
 
     const comboboxes = await collectComboboxFieldsInRoot(
@@ -84,20 +91,19 @@ export const greenhouseAdapter: AtsAdapter = {
       GREENHOUSE_COMBOBOX_SELECTORS,
     );
 
-    const merged = dedupeFields([...fields, ...comboboxes]);
-    if (merged.length > 0) return merged;
-
-    const fallbackControls = Array.from(form.querySelectorAll("input, textarea, select"));
     const fallbackFields: FormField[] = [];
-
-    for (const control of fallbackControls) {
+    for (const control of form.querySelectorAll("input, textarea, select")) {
       if (control.closest(SKIP_FIELD_SELECTORS)) continue;
 
       if (control.tagName.toLowerCase() === "select") {
         const select = control as HTMLSelectElement;
         if (shouldSkipSelect(select)) continue;
         fallbackFields.push(
-          toSelectFormField(select, getGreenhouseLabel(form, select), fallbackFields.length),
+          toSelectFormField(
+            select,
+            getGreenhouseLabel(form, select),
+            fallbackFields.length,
+          ),
         );
         continue;
       }
@@ -109,7 +115,7 @@ export const greenhouseAdapter: AtsAdapter = {
       );
     }
 
-    return dedupeFields(fallbackFields);
+    return dedupeFields([...fields, ...comboboxes, ...fallbackFields]);
   },
 
   resolveElement(id, label) {

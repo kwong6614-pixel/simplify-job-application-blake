@@ -281,24 +281,25 @@ export function collectControlsFromRoots(
   for (const root of roots) {
     if (shouldSkipRoot?.(root)) continue;
 
-    const select = root.querySelector("select");
-    if (select && !shouldSkipSelect(select)) {
+    for (const select of root.querySelectorAll("select")) {
+      if (shouldSkipSelect(select)) continue;
       fields.push(toSelectFormField(select, getLabel(root, select), fields.length));
-      continue;
     }
 
-    const input = root.querySelector("input, textarea");
-    if (!input || !isTextLikeInput(input as HTMLElement)) continue;
-    if (isComboboxTrigger(input as HTMLElement)) continue;
-    if (shouldSkipInput(input as HTMLInputElement | HTMLTextAreaElement)) continue;
+    for (const input of root.querySelectorAll("input, textarea")) {
+      const element = input as HTMLElement;
+      if (isComboboxTrigger(element)) continue;
+      if (!isTextLikeInput(element)) continue;
+      if (shouldSkipInput(element as HTMLInputElement | HTMLTextAreaElement)) continue;
 
-    fields.push(
-      toFormField(
-        input as HTMLInputElement | HTMLTextAreaElement,
-        getLabel(root, input as HTMLElement),
-        fields.length,
-      ),
-    );
+      fields.push(
+        toFormField(
+          element as HTMLInputElement | HTMLTextAreaElement,
+          getLabel(root, element),
+          fields.length,
+        ),
+      );
+    }
   }
 
   return fields;

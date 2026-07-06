@@ -1,4 +1,4 @@
-import { ashbyAdapter, isAshbyPage } from "./ashby";
+import { ashbyAdapter, isAshbyEmbedOnCustomDomain } from "./ashby";
 import { genericAdapter } from "./generic";
 import { greenhouseAdapter } from "./greenhouse";
 import { leverAdapter } from "./lever";
@@ -15,11 +15,14 @@ const HOST_ADAPTERS: AtsAdapter[] = [
 ];
 
 export function getAtsAdapter(hostname: string, url: string, document?: Document): AtsAdapter {
-  if (document && isAshbyPage(document, hostname, url)) {
+  const hostAdapter = HOST_ADAPTERS.find((adapter) => adapter.matches(hostname, url));
+  if (hostAdapter) return hostAdapter;
+
+  if (document && isAshbyEmbedOnCustomDomain(document, url)) {
     return ashbyAdapter;
   }
 
-  return HOST_ADAPTERS.find((adapter) => adapter.matches(hostname, url)) ?? genericAdapter;
+  return genericAdapter;
 }
 
 export type { AtsAdapter } from "./shared";

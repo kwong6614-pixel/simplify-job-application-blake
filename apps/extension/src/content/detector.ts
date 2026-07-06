@@ -71,6 +71,10 @@ function shouldRetryEmptyFields(fields: FormField[], atsPlatform: string): boole
     return true;
   }
 
+  if (atsPlatform === "lever" && href.includes("lever.co")) {
+    return true;
+  }
+
   if (href.includes("greenhouse.io") && (href.includes("job_app") || href.includes("/jobs/"))) {
     return true;
   }
