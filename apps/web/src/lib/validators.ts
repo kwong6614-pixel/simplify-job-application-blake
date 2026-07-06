@@ -88,6 +88,10 @@ export function parseSignupFormData(formData: FormData) {
   return signupFieldsSchema.safeParse(raw);
 }
 
+export const profileUpdateSchema = signupFieldsSchema.omit({ email: true, password: true });
+
+export type ProfileUpdateInput = z.infer<typeof profileUpdateSchema>;
+
 export const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),

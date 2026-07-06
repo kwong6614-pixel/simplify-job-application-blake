@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { ensureSheetSyncedForUser } from "@/lib/sheets/auto-sync";
 import { getAutoSyncSheetTabNames, isGoogleSheetEnvConfigured } from "@/lib/sheets/config";
 import DashboardSync from "@/components/dashboard-sync";
+import DashboardProfile, { type DashboardProfileInitial } from "@/components/dashboard-profile";
 
 export default async function ProfilePage() {
   const session = await auth();
@@ -13,13 +14,15 @@ export default async function ProfilePage() {
   const profile = await prisma.profile.findUnique({
     where: { userId: session.user.id },
     include: {
-      workExperiences: true,
-      educations: true,
-      skills: true,
+      workExperiences: { orderBy: { sortOrder: "asc" } },
+      educations: { orderBy: { sortOrder: "asc" } },
+      skills: { orderBy: { name: "asc" } },
     },
   });
 
   if (!profile) redirect("/signup");
+
+  const { workExperiences, educations, skills } = profile;
 
   let autoSyncMessage: string | null = null;
   if (isGoogleSheetEnvConfigured()) {
@@ -43,6 +46,66 @@ export default async function ProfilePage() {
     }),
   ]);
 
+  const initialProfile: DashboardProfileInitial = {
+    firstName: profile.firstName,
+    lastName: profile.lastName,
+    middleName: profile.middleName ?? "",
+    preferredName: profile.preferredName ?? "",
+    pronouns: profile.pronouns ?? "",
+    phone: profile.phone,
+    addressLine1: profile.addressLine1,
+    addressLine2: profile.addressLine2 ?? "",
+    city: profile.city,
+    state: profile.state,
+    zip: profile.zip,
+    country: profile.country,
+    birthYear: profile.birthYear,
+    usWorkAuthorization: profile.usWorkAuthorization as DashboardProfileInitial["usWorkAuthorization"],
+    requiresSponsorship: profile.requiresSponsorship,
+    gender: profile.gender,
+    ethnicity: profile.ethnicity,
+    veteranStatus: profile.veteranStatus as DashboardProfileInitial["veteranStatus"],
+    disabilityStatus: profile.disabilityStatus as DashboardProfileInitial["disabilityStatus"],
+    sexualOrientation: profile.sexualOrientation,
+    transgenderStatus: profile.transgenderStatus as DashboardProfileInitial["transgenderStatus"],
+    salaryExpectation: profile.salaryExpectation,
+    salaryPeriod: profile.salaryPeriod as DashboardProfileInitial["salaryPeriod"],
+    jobSource: profile.jobSource,
+    linkedinUrl: profile.linkedinUrl ?? "",
+    githubUrl: profile.githubUrl ?? "",
+    portfolioUrl: profile.portfolioUrl ?? "",
+    websiteUrl: profile.websiteUrl ?? "",
+    willingToRelocate: profile.willingToRelocate,
+    remotePreference: profile.remotePreference as DashboardProfileInitial["remotePreference"],
+    earliestStartDate: profile.earliestStartDate ?? "",
+    yearsOfExperience: profile.yearsOfExperience ?? undefined,
+    highestEducationLevel: profile.highestEducationLevel ?? "",
+    resumeFileName: profile.resumeFileName,
+    resumeParsedAt: profile.resumeParsedAt?.toISOString() ?? null,
+    workExperiences: workExperiences.map(
+      ({ company, title, location, startDate, endDate, isCurrent, description }) => ({
+        company,
+        title,
+        location: location ?? "",
+        startDate,
+        endDate: endDate ?? "",
+        isCurrent,
+        description: description ?? "",
+      }),
+    ),
+    educations: educations.map(
+      ({ school, degree, fieldOfStudy, startDate, endDate, gpa }) => ({
+        school,
+        degree,
+        fieldOfStudy: fieldOfStudy ?? "",
+        startDate: startDate ?? "",
+        endDate: endDate ?? "",
+        gpa: gpa ?? "",
+      }),
+    ),
+    skills: skills.map((skill) => skill.name),
+  };
+
   return (
     <main className="mx-auto max-w-4xl px-6 py-12">
       <div className="flex items-center justify-between">
@@ -64,36 +127,7 @@ export default async function ProfilePage() {
         autoSyncMessage={autoSyncMessage}
       />
 
-      <section className="mt-6 grid gap-4 rounded-xl border bg-white p-6 md:grid-cols-2">
-        <div>
-          <h2 className="font-medium">Personal</h2>
-          <p className="mt-2 text-sm text-slate-700">
-            {profile.firstName} {profile.lastName}
-          </p>
-          <p className="text-sm text-slate-700">{profile.phone}</p>
-          <p className="text-sm text-slate-700">
-            {profile.addressLine1}, {profile.city}, {profile.state} {profile.zip}
-          </p>
-        </div>
-        <div>
-          <h2 className="font-medium">Application defaults</h2>
-          <p className="mt-2 text-sm text-slate-700">
-            Salary: ${profile.salaryExpectation.toLocaleString()} / {profile.salaryPeriod}
-          </p>
-          <p className="text-sm text-slate-700">Job source: {profile.jobSource}</p>
-          <p className="text-sm text-slate-700">
-            Sponsorship required: {profile.requiresSponsorship ? "Yes" : "No"}
-          </p>
-        </div>
-      </section>
-
-      <section className="mt-6 rounded-xl border bg-white p-6">
-        <h2 className="font-medium">Resume-derived data</h2>
-        <p className="mt-2 text-sm text-slate-600">
-          {profile.workExperiences.length} roles, {profile.educations.length} schools,{" "}
-          {profile.skills.length} skills
-        </p>
-      </section>
+      <DashboardProfile email={session.user.email ?? ""} initialProfile={initialProfile} />
     </main>
   );
 }
