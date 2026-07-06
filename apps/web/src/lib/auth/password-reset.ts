@@ -1,16 +1,12 @@
 import { prisma } from "@/lib/db";
 import { createExtensionToken, hashPassword, hashToken } from "@/lib/crypto";
-import { sendPasswordResetEmail } from "@/lib/email/send-password-reset";
+import { getAppBaseUrl } from "@/lib/email/config";
+import {
+  EmailDeliveryError,
+  sendPasswordResetEmail,
+} from "@/lib/email/send-password-reset";
 
 const RESET_TTL_MS = 60 * 60 * 1000;
-
-function getResetBaseUrl(): string {
-  return (
-    process.env.NEXTAUTH_URL?.trim() ||
-    process.env.AUTH_URL?.trim() ||
-    "http://localhost:3000"
-  );
-}
 
 export async function requestPasswordReset(email: string): Promise<void> {
   const normalizedEmail = email.toLowerCase();
@@ -32,8 +28,19 @@ export async function requestPasswordReset(email: string): Promise<void> {
     },
   });
 
-  const resetUrl = `${getResetBaseUrl()}/reset-password?token=${token}`;
-  await sendPasswordResetEmail(user.email, resetUrl);
+  const resetUrl = `${getAppBaseUrl()}/reset-password?token=${token}`;
+
+  try {
+    await sendPasswordResetEmail(user.email, resetUrl);
+  } catch (error) {
+    await prisma.passwordResetToken.deleteMany({ where: { userId: user.id } });
+
+    if (error instanceof EmailDeliveryError) {
+      throw error;
+    }
+
+    throw new EmailDeliveryError("Failed to send password reset email");
+  }
 }
 
 export async function resetPasswordWithToken(

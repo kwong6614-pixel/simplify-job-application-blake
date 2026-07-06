@@ -121,3 +121,31 @@ postgresql://postgres.[PROJECT-REF]:[PASSWORD]@aws-0-[REGION].pooler.supabase.co
 ```
 
 The app also auto-appends `pgbouncer=true` when it detects a Supabase pooler URL without it. Without this, Prisma can fail with `prepared statement "s0" already exists`.
+
+## Password reset email (Resend)
+
+Forgot-password requires Resend in production (Vercel).
+
+1. Create a [Resend](https://resend.com) account and API key.
+2. Add and verify your sending domain in Resend → **Domains**.
+3. Set these Vercel environment variables:
+
+| Variable | Example |
+|----------|---------|
+| `RESEND_API_KEY` | `re_...` |
+| `EMAIL_FROM` | `JobApply <noreply@yourdomain.com>` |
+| `NEXTAUTH_URL` | `https://your-app.vercel.app` |
+| `APP_NAME` | `JobApply` (optional) |
+| `EMAIL_REPLY_TO` | `support@yourdomain.com` (optional) |
+
+`EMAIL_FROM` must use an address on a domain verified in Resend.
+
+For local testing before your domain is verified, Resend provides a sandbox sender:
+
+```text
+EMAIL_FROM="JobApply <onboarding@resend.dev>"
+```
+
+Sandbox mode only delivers to the email address on your Resend account.
+
+After deploy, test at `/forgot-password` and confirm the reset email arrives with a link to `/reset-password?token=...`.
