@@ -52,3 +52,8 @@ export function isGoogleSheetEnvConfigured(): boolean {
 export function getPrimarySheetTabName(): string {
   return getSheetTabNames()[0] ?? SHEET_TAB_NAME;
 }
+
+/** Auto-sync always watches and syncs this tab only. */
+export function getAutoSyncSheetTabNames(): string[] {
+  return [SHEET_TAB_NAME];
+}

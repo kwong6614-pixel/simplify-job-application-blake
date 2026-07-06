@@ -9,6 +9,7 @@ export default function SettingsForm() {
   const [sheetTabNames, setSheetTabNames] = useState<string[]>([]);
   const [lastSheetSyncAt, setLastSheetSyncAt] = useState<string | null>(null);
   const [syncedJobCount, setSyncedJobCount] = useState(0);
+  const [autoSyncEnabled, setAutoSyncEnabled] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -22,6 +23,12 @@ export default function SettingsForm() {
         setSheetTabNames(Array.isArray(data.sheetTabNames) ? data.sheetTabNames : []);
         setLastSheetSyncAt(data.lastSheetSyncAt ?? null);
         setSyncedJobCount(Number(data.syncedJobCount ?? 0));
+        setAutoSyncEnabled(Boolean(data.autoSyncEnabled));
+
+        const autoSync = data.lastAutoSync as { ran?: boolean; synced?: number } | null;
+        if (autoSync?.ran && autoSync.synced !== undefined) {
+          setStatus(`Auto-synced ${autoSync.synced} rows from the sheet.`);
+        }
       })
       .catch(() => undefined);
   }, []);
@@ -75,6 +82,12 @@ export default function SettingsForm() {
         Tabs: {sheetTabNames.length > 0 ? sheetTabNames.join(", ") : "For Resume"}
       </p>
       <p className="text-sm text-slate-700">
+        Auto-sync:{" "}
+        {autoSyncEnabled
+          ? 'on — syncs the "For Resume" tab on first use and when that tab changes (extension match or Settings open).'
+          : "off — configure Google Sheet env vars first."}
+      </p>
+      <p className="text-sm text-slate-700">
         Last sync:{" "}
         {lastSheetSyncAt
           ? `${new Date(lastSheetSyncAt).toLocaleString()} (${syncedJobCount} jobs cached)`
@@ -86,10 +99,11 @@ export default function SettingsForm() {
         disabled={loading || !sheetConfigured}
         className="rounded-lg border border-slate-300 px-4 py-2 hover:bg-slate-50 disabled:opacity-50"
       >
-        {loading ? "Syncing..." : "Sync sheet tabs"}
+        {loading ? "Syncing..." : "Force sync now"}
       </button>
 
       {status ? <p className="text-sm text-slate-700">{status}</p> : null}
     </section>
   );
 }
+

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getUserFromExtensionToken } from "@/lib/auth/extension";
-import { syncSheetJobsForUser } from "@/lib/sheets/google";
+import { ensureSheetSyncedForUser } from "@/lib/sheets/auto-sync";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -20,8 +20,18 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await syncSheetJobsForUser(userId);
-    return NextResponse.json(result);
+    const result = await ensureSheetSyncedForUser(userId, { force: true });
+    if (result.skipped && result.reason === "not_configured") {
+      return NextResponse.json(
+        { error: "Google Sheet env vars are not configured on the server." },
+        { status: 400 },
+      );
+    }
+    return NextResponse.json({
+      synced: result.synced ?? 0,
+      tabs: result.tabs ?? {},
+      auto: false,
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Sync failed";
     return NextResponse.json({ error: message }, { status: 400 });

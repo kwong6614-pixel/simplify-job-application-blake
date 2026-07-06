@@ -156,7 +156,20 @@ async function upsertPreparedJobs(jobs: PreparedSheetJob[]): Promise<number> {
   return upserted;
 }
 
-async function fetchSheetRowsByTab(
+export async function getAuthorizedSheetsClient() {
+  const config = getGoogleSheetEnvConfig();
+  const client = getOAuthClient(config.clientId, config.clientSecret);
+  client.setCredentials({
+    refresh_token: config.refreshToken,
+  });
+
+  return {
+    sheets: google.sheets({ version: "v4", auth: client }),
+    spreadsheetId: config.spreadsheetId,
+  };
+}
+
+export async function fetchSheetRowsByTab(
   sheets: ReturnType<typeof google.sheets>,
   spreadsheetId: string,
   sheetTabNames: string[],
@@ -177,28 +190,15 @@ async function fetchSheetRowsByTab(
   return rowsByTab;
 }
 
-export async function syncSheetJobsForUser(userId: string): Promise<{
-  synced: number;
-  tabs: Record<string, number>;
-}> {
-  const config = getGoogleSheetEnvConfig();
-
-  const client = getOAuthClient(config.clientId, config.clientSecret);
-  client.setCredentials({
-    refresh_token: config.refreshToken,
-  });
-
-  const sheets = google.sheets({ version: "v4", auth: client });
-  const rowsByTab = await fetchSheetRowsByTab(
-    sheets,
-    config.spreadsheetId,
-    config.sheetTabNames,
-  );
-
+export async function syncSheetJobsFromRows(
+  userId: string,
+  rowsByTab: Record<string, string[][]>,
+  sheetTabNames: string[],
+): Promise<{ synced: number; tabs: Record<string, number> }> {
   const tabs: Record<string, number> = {};
   const preparedJobs: PreparedSheetJob[] = [];
 
-  for (const sheetTabName of config.sheetTabNames) {
+  for (const sheetTabName of sheetTabNames) {
     const rows = rowsByTab[sheetTabName] ?? [];
     let tabCount = 0;
 
@@ -215,8 +215,17 @@ export async function syncSheetJobsForUser(userId: string): Promise<{
   }
 
   const synced = await upsertPreparedJobs(preparedJobs);
-
   return { synced, tabs };
+}
+
+export async function syncSheetJobsForUser(userId: string): Promise<{
+  synced: number;
+  tabs: Record<string, number>;
+}> {
+  const config = getGoogleSheetEnvConfig();
+  const { sheets, spreadsheetId } = await getAuthorizedSheetsClient();
+  const rowsByTab = await fetchSheetRowsByTab(sheets, spreadsheetId, config.sheetTabNames);
+  return syncSheetJobsFromRows(userId, rowsByTab, config.sheetTabNames);
 }
 
 export async function matchJobByUrl(userId: string, url: string) {

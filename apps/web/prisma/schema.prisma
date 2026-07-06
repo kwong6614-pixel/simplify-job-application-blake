@@ -198,6 +198,12 @@ model SheetJob {
   @@index([userId, urlNormalized])
 }
 
+model GoogleSheetSyncMeta {
+  spreadsheetId      String   @id
+  contentFingerprint String
+  updatedAt          DateTime @updatedAt
+}
+
 model UrlMapping {
   id              String   @id @default(cuid())
   userId          String
