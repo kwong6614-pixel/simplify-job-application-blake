@@ -13,6 +13,8 @@ const STRONG_SIGNATURE_PREFIXES = [
   "path-job:",
 ] as const;
 
+const MIN_MATCH_SCORE = 80;
+
 export function normalizeSheetUrl(url: string): string {
   const trimmed = url.trim();
   if (!trimmed) return trimmed;
@@ -68,6 +70,18 @@ function addGreenhouseSignatures(
   }
 }
 
+function addAshbySignatures(parsed: URL, path: string, signatures: Set<string>): void {
+  const ashbyQueryId = parsed.searchParams.get("ashby_jid")?.trim().toLowerCase();
+  if (ashbyQueryId) {
+    signatures.add(`ashby:job:${ashbyQueryId}`);
+  }
+
+  const ashbyPath = path.match(/^\/([^/]+)\/([0-9a-f-]{36})(?:\/|$)/i);
+  if (ashbyPath) {
+    signatures.add(`ashby:job:${ashbyPath[2].toLowerCase()}`);
+  }
+}
+
 export function getUrlMatchSignatures(url: string): Set<string> {
   const signatures = new Set<string>();
   const normalizedInput = normalizeSheetUrl(url);
@@ -83,8 +97,6 @@ export function getUrlMatchSignatures(url: string): Set<string> {
     const host = parsed.hostname.replace(/^www\./i, "").toLowerCase();
     const path = parsed.pathname.replace(/\/+$/, "").toLowerCase();
 
-    signatures.add(`${host}${path}`);
-
     if (host.includes("greenhouse.io")) {
       addGreenhouseSignatures(parsed, path, signatures);
     } else {
@@ -94,16 +106,20 @@ export function getUrlMatchSignatures(url: string): Set<string> {
       }
     }
 
+    if (host.includes("ashbyhq.com")) {
+      addAshbySignatures(parsed, path, signatures);
+    } else {
+      const ashbyQueryId = parsed.searchParams.get("ashby_jid");
+      if (ashbyQueryId) {
+        signatures.add(`ashby:job:${ashbyQueryId.toLowerCase()}`);
+      }
+    }
+
     const leverId = path.match(
       /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i,
     )?.[1];
     if (leverId) {
       signatures.add(`lever:job:${leverId.toLowerCase()}`);
-    }
-
-    const ashbyId = parsed.searchParams.get("ashby_jid");
-    if (ashbyId) {
-      signatures.add(`ashby:job:${ashbyId}`);
     }
 
     const workdayId =
@@ -140,35 +156,57 @@ export function getUrlMatchSignatures(url: string): Set<string> {
   return signatures;
 }
 
-function getStrongSignatures(url: string): Set<string> {
-  const strong = new Set<string>();
-  for (const signature of getUrlMatchSignatures(url)) {
-    if (STRONG_SIGNATURE_PREFIXES.some((prefix) => signature.startsWith(prefix))) {
-      strong.add(signature);
+function scoreSharedSignature(signature: string): number {
+  if (signature.startsWith("greenhouse:") && signature.split(":").length === 3) {
+    const middle = signature.split(":")[1];
+    if (middle !== "job" && middle !== "jr_id") {
+      return 95;
     }
   }
-  return strong;
+
+  if (
+    signature.startsWith("greenhouse:job:") ||
+    signature.startsWith("ashby:job:") ||
+    signature.startsWith("lever:job:") ||
+    signature.startsWith("workday:job:") ||
+    signature.startsWith("linkedin:job:") ||
+    signature.startsWith("smartrecruiters:job:")
+  ) {
+    return 90;
+  }
+
+  if (signature.startsWith("greenhouse:jr_id:") || signature.startsWith("path-job:")) {
+    return 85;
+  }
+
+  if (STRONG_SIGNATURE_PREFIXES.some((prefix) => signature.startsWith(prefix))) {
+    return 80;
+  }
+
+  return 0;
 }
 
-export function urlsMatchForJobLookup(sheetUrl: string, applicationUrl: string): boolean {
+export function scoreUrlMatch(sheetUrl: string, applicationUrl: string): number {
+  const sheetNormalized = normalizeUrl(normalizeSheetUrl(sheetUrl));
+  const appNormalized = normalizeUrl(normalizeSheetUrl(applicationUrl));
+  if (sheetNormalized === appNormalized) {
+    return 100;
+  }
+
   const sheetSignatures = getUrlMatchSignatures(sheetUrl);
   const appSignatures = getUrlMatchSignatures(applicationUrl);
 
+  let best = 0;
   for (const signature of sheetSignatures) {
-    if (appSignatures.has(signature)) {
-      return true;
-    }
+    if (!appSignatures.has(signature)) continue;
+    best = Math.max(best, scoreSharedSignature(signature));
   }
 
-  const sheetStrong = getStrongSignatures(sheetUrl);
-  const appStrong = getStrongSignatures(applicationUrl);
-  for (const signature of sheetStrong) {
-    if (appStrong.has(signature)) {
-      return true;
-    }
-  }
+  return best;
+}
 
-  return false;
+export function urlsMatchForJobLookup(sheetUrl: string, applicationUrl: string): boolean {
+  return scoreUrlMatch(sheetUrl, applicationUrl) >= MIN_MATCH_SCORE;
 }
 
 export function getUrlSearchHints(url: string): string[] {
@@ -176,51 +214,51 @@ export function getUrlSearchHints(url: string): string[] {
 
   try {
     const parsed = new URL(normalizeSheetUrl(url));
-    const host = parsed.hostname.replace(/^www\./i, "");
-    hints.add(host);
-
-    if (host.includes("greenhouse.io")) {
-      hints.add("greenhouse.io");
-    }
+    const path = parsed.pathname.replace(/\/+$/, "").toLowerCase();
 
     const forSlug = parsed.searchParams.get("for");
-    if (forSlug) hints.add(forSlug);
-
     const jrId = parsed.searchParams.get("jr_id");
-    if (jrId) hints.add(jrId);
-
     const embedToken = parsed.searchParams.get("token");
-    if (embedToken && /^\d+$/.test(embedToken)) {
-      hints.add(embedToken);
-    }
-
     const ghId =
-      parsed.pathname.match(/\/jobs\/(\d+)/)?.[1] ||
+      path.match(/\/jobs\/(\d+)/)?.[1] ||
       parsed.searchParams.get("gh_jid") ||
       (embedToken && /^\d+$/.test(embedToken) ? embedToken : null);
-    if (ghId) hints.add(ghId);
 
-    const boards = parsed.pathname.match(/^\/([^/]+)\/jobs\/(\d+)/);
+    if (ghId) hints.add(ghId);
+    if (jrId && jrId.length >= 6) hints.add(jrId);
+    if (forSlug && ghId) hints.add(`${forSlug}/jobs/${ghId}`);
+
+    const boards = path.match(/^\/([^/]+)\/jobs\/(\d+)/);
     if (boards) {
-      hints.add(boards[1]);
       hints.add(boards[2]);
+      hints.add(`${boards[1]}/jobs/${boards[2]}`);
     }
 
-    const leverId = parsed.pathname.match(
+    const ashbyId =
+      parsed.searchParams.get("ashby_jid") ||
+      path.match(/^\/([^/]+)\/([0-9a-f-]{36})(?:\/|$)/i)?.[2];
+    if (ashbyId) hints.add(ashbyId);
+
+    const leverId = path.match(
       /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i,
     )?.[1];
     if (leverId) hints.add(leverId);
 
-    const ashbyId = parsed.searchParams.get("ashby_jid");
-    if (ashbyId) hints.add(ashbyId);
+    const workdayId =
+      parsed.searchParams.get("jobPostingId") ||
+      parsed.searchParams.get("jobId") ||
+      parsed.searchParams.get("selected_job_id");
+    if (workdayId) hints.add(workdayId);
 
-    const lastSegment = parsed.pathname.split("/").filter(Boolean).pop();
-    if (lastSegment && (/^\d{4,}$/.test(lastSegment) || lastSegment.length >= 20)) {
+    const lastSegment = path.split("/").filter(Boolean).pop();
+    if (lastSegment && /^\d{6,}$/.test(lastSegment)) {
       hints.add(lastSegment);
     }
   } catch {
     hints.add(url.trim());
   }
 
-  return [...hints].filter((hint) => hint.length >= 3);
+  return [...hints].filter((hint) => hint.length >= 4);
 }
+
+export { MIN_MATCH_SCORE };

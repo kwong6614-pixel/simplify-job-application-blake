@@ -1,7 +1,9 @@
+export type ComboboxPlatform = "workday" | "ashby" | "greenhouse" | "generic";
+
 export interface ComboboxHandle {
   id: string;
   trigger: HTMLElement;
-  platform: "workday" | "ashby" | "generic";
+  platform: ComboboxPlatform;
 }
 
 const registry = new Map<string, ComboboxHandle>();

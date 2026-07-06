@@ -1,4 +1,5 @@
 import type { FormField } from "../../shared/messages";
+import { collectComboboxFieldsInRoot } from "./combobox";
 import type { AtsAdapter } from "./shared";
 import {
   collectControlsFromRoots,
@@ -27,6 +28,14 @@ const SKIP_FIELD_SELECTORS = [
   ".attach-or-paste",
 ].join(", ");
 
+const GREENHOUSE_COMBOBOX_SELECTORS = [
+  '.select input[role="combobox"]',
+  'input[aria-haspopup="listbox"]',
+  'button[aria-haspopup="listbox"]',
+  ".select__container input",
+  ".select .select__control",
+];
+
 function getGreenhouseLabel(fieldRoot: Element, control: HTMLElement): string {
   const labelEl =
     fieldRoot.querySelector("label") ??
@@ -49,11 +58,15 @@ function shouldSkipRoot(root: Element): boolean {
 export const greenhouseAdapter: AtsAdapter = {
   id: "greenhouse",
 
-  matches(hostname) {
-    return hostname.includes("greenhouse.io");
+  matches(hostname, url) {
+    return (
+      hostname.includes("greenhouse.io") ||
+      url.includes("gh_jid=") ||
+      url.includes("greenhouse.io")
+    );
   },
 
-  collectFields(document) {
+  async collectFields(document) {
     const form =
       document.querySelector(FORM_SELECTORS) ??
       document.querySelector("main form") ??
@@ -64,7 +77,16 @@ export const greenhouseAdapter: AtsAdapter = {
     const fieldRoots = Array.from(form.querySelectorAll(".field, .text, .select"));
     const fields = collectControlsFromRoots(fieldRoots, getGreenhouseLabel, shouldSkipRoot);
 
-    if (fields.length > 0) return dedupeFields(fields);
+    const comboboxes = await collectComboboxFieldsInRoot(
+      document,
+      form,
+      "greenhouse",
+      getGreenhouseLabel,
+      GREENHOUSE_COMBOBOX_SELECTORS,
+    );
+
+    const merged = dedupeFields([...fields, ...comboboxes]);
+    if (merged.length > 0) return merged;
 
     const fallbackControls = Array.from(form.querySelectorAll("input, textarea, select"));
     const fallbackFields: FormField[] = [];

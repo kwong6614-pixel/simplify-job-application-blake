@@ -22,11 +22,34 @@ export function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
+/** Query params that identify a specific job posting — preserved when normalizing URLs. */
+const PRESERVED_URL_PARAMS = [
+  "for",
+  "token",
+  "gh_jid",
+  "jr_id",
+  "ashby_jid",
+  "jobPostingId",
+  "jobId",
+  "selected_job_id",
+] as const;
+
 export function normalizeUrl(url: string): string {
   try {
     const parsed = new URL(url);
     parsed.hash = "";
-    parsed.search = "";
+
+    const kept = new URLSearchParams();
+    for (const key of PRESERVED_URL_PARAMS) {
+      const value = parsed.searchParams.get(key)?.trim();
+      if (value) {
+        kept.set(key, value.toLowerCase());
+      }
+    }
+
+    const sorted = [...kept.entries()].sort(([a], [b]) => a.localeCompare(b));
+    parsed.search = sorted.length > 0 ? `?${new URLSearchParams(sorted).toString()}` : "";
+
     let pathname = parsed.pathname.replace(/\/+$/, "");
     if (!pathname) pathname = "/";
     parsed.pathname = pathname;

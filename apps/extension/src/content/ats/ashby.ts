@@ -14,8 +14,11 @@ import {
 
 const FORM_SELECTORS = [
   "form[data-testid='job-application-form']",
+  "form[action*='ashbyhq.com']",
   "form[action*='application']",
   "form[class*='Application']",
+  "[data-testid='application-form'] form",
+  "[class*='ApplicationForm'] form",
   "main form",
 ].join(", ");
 
@@ -24,7 +27,35 @@ const SKIP_CONTAINERS = [
   "[data-testid*='file']",
   "[class*='FileUpload']",
   "[class*='Resume']",
+  "input[type='file']",
 ].join(", ");
+
+const ASHBY_COMBOBOX_SELECTORS = [
+  '[class*="Select"] [role="combobox"]',
+  'input[aria-haspopup="listbox"]',
+  'button[aria-haspopup="listbox"]',
+  '[data-testid*="select"]',
+];
+
+export function isAshbyPage(document: Document, hostname: string, url: string): boolean {
+  if (hostname.includes("ashbyhq.com") || url.includes("ashby_jid")) {
+    return true;
+  }
+
+  if (document.querySelector(FORM_SELECTORS)) {
+    return true;
+  }
+
+  if (document.querySelector('script[src*="ashbyhq.com"], a[href*="ashbyhq.com"]')) {
+    return true;
+  }
+
+  return Boolean(
+    document.querySelector(
+      '[class*="ashby"], [data-testid*="ashby"], meta[property*="ashby"]',
+    ),
+  );
+}
 
 function getAshbyLabel(fieldRoot: Element, control: HTMLElement): string {
   const labelEl =
@@ -62,14 +93,14 @@ function collectControl(
   fields.push(toFormField(input, getAshbyLabel(fieldRoot, input), fields.length));
 }
 
-async function collectComboboxFields(document: Document): Promise<FormField[]> {
-  const form = document.querySelector(FORM_SELECTORS) ?? document.querySelector("form");
-  if (!form) return [];
-
-  return collectComboboxFieldsInRoot(document, form, "ashby", getAshbyLabel, [
-    '[class*="Select"]',
-    '[data-testid*="select"]',
-  ]);
+function findApplicationRoot(document: Document): Element | null {
+  return (
+    document.querySelector(FORM_SELECTORS) ??
+    document.querySelector("form") ??
+    document.querySelector("[data-testid='job-application-form']") ??
+    document.querySelector("[class*='ApplicationForm']") ??
+    document.querySelector("main")
+  );
 }
 
 export const ashbyAdapter: AtsAdapter = {
@@ -80,7 +111,7 @@ export const ashbyAdapter: AtsAdapter = {
   },
 
   async collectFields(document) {
-    const form = document.querySelector(FORM_SELECTORS) ?? document.querySelector("form");
+    const form = findApplicationRoot(document);
     if (!form) return [];
 
     const fields: FormField[] = [];
@@ -98,7 +129,9 @@ export const ashbyAdapter: AtsAdapter = {
     }
 
     const groupedFields = Array.from(
-      form.querySelectorAll("[class*='FieldEntry'], [class*='field-entry'], [class*='Question']"),
+      form.querySelectorAll(
+        "[class*='FieldEntry'], [class*='field-entry'], [class*='Question'], [class*='question']",
+      ),
     );
 
     for (const group of groupedFields) {
@@ -108,7 +141,14 @@ export const ashbyAdapter: AtsAdapter = {
       collectControl(fields, group, control as HTMLElement);
     }
 
-    const comboboxes = await collectComboboxFields(document);
+    const comboboxes = await collectComboboxFieldsInRoot(
+      document,
+      form,
+      "ashby",
+      getAshbyLabel,
+      ASHBY_COMBOBOX_SELECTORS,
+    );
+
     return dedupeFields([...fields, ...comboboxes]);
   },
 

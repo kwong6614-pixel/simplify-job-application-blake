@@ -1,5 +1,6 @@
 import type { FormField, FormFieldOption } from "../../shared/messages";
 import { registerCombobox } from "./combobox-registry";
+import type { ComboboxPlatform } from "./combobox-registry";
 
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
@@ -51,6 +52,13 @@ export function isComboboxTrigger(element: HTMLElement): boolean {
 
   const popup = element.getAttribute("aria-haspopup");
   if (popup === "listbox" || popup === "true") return true;
+
+  const ariaAutocomplete = element.getAttribute("aria-autocomplete");
+  if (ariaAutocomplete === "list" && element.tagName.toLowerCase() === "input") return true;
+
+  if (element.closest(".select, .select__container, [class*='select__']")) {
+    if (element.matches('input, button[aria-haspopup="listbox"]')) return true;
+  }
 
   const automationId = element.getAttribute("data-automation-id") ?? "";
   if (/dropdown|selecthead|multiselect/i.test(automationId)) return true;
@@ -326,7 +334,7 @@ function toComboboxFormField(
   label: string,
   index: number,
   options: FormFieldOption[],
-  platform: "workday" | "ashby" | "generic",
+  platform: ComboboxPlatform,
 ): FormField {
   const id = resolveComboboxId(trigger, label, index);
   registerCombobox({ id, trigger, platform });
@@ -346,7 +354,7 @@ function toComboboxFormField(
 export async function collectComboboxFieldsInRoot(
   document: Document,
   root: Element,
-  platform: "workday" | "ashby",
+  platform: ComboboxPlatform,
   getLabel: (fieldRoot: Element, trigger: HTMLElement) => string,
   extraSelectors: string[] = [],
 ): Promise<FormField[]> {
@@ -363,6 +371,9 @@ export async function collectComboboxFieldsInRoot(
           "[class*='field-entry']",
           "[class*='Question']",
           "[class*='field']",
+          ".field",
+          ".select",
+          ".text",
         ].join(", "),
       ) ?? trigger.parentElement ?? trigger;
 

@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { getUserFromExtensionToken } from "@/lib/auth/extension";
 import { prisma } from "@/lib/db";
 import { normalizeUrl } from "@/lib/crypto";
+import { MIN_MATCH_SCORE, scoreUrlMatch } from "@/lib/sheets/url-match";
 import { ensureSheetSyncedForUser } from "@/lib/sheets/auto-sync";
 import { matchJobByUrl, rememberApplicationUrl } from "@/lib/sheets/google";
 
@@ -50,7 +51,7 @@ export async function GET(request: Request) {
     });
   }
 
-  if (normalizeUrl(job.url) !== normalizeUrl(url)) {
+  if (normalizeUrl(job.url) !== normalizeUrl(url) && scoreUrlMatch(job.url, url) >= MIN_MATCH_SCORE) {
     await rememberApplicationUrl(userId, job.id, url);
   }
 

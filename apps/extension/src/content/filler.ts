@@ -20,7 +20,7 @@ export function applyControlValue(element: HTMLElement, value: string): boolean 
 
 export async function applyFill(values: Record<string, string>, fields: FormField[]) {
   const fieldMap = new Map(fields.map((field) => [field.id, field]));
-  const adapter = getAtsAdapter(window.location.hostname, window.location.href);
+  const adapter = getAtsAdapter(window.location.hostname, window.location.href, document);
 
   const syncFields: Array<[string, string, FormField]> = [];
   const comboboxFields: Array<[string, string, FormField]> = [];
@@ -58,10 +58,10 @@ export async function applyFill(values: Record<string, string>, fields: FormFiel
 }
 
 export async function collectFields(): Promise<FormField[]> {
-  const adapter = getAtsAdapter(window.location.hostname, window.location.href);
+  const adapter = getAtsAdapter(window.location.hostname, window.location.href, document);
   return adapter.collectFields(document);
 }
 
 export function getAtsPlatform(): string {
-  return getAtsAdapter(window.location.hostname, window.location.href).id;
+  return getAtsAdapter(window.location.hostname, window.location.href, document).id;
 }

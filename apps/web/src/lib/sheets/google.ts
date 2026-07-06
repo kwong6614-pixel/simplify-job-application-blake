@@ -4,8 +4,9 @@ import { normalizeUrl, sheetRowHash } from "@/lib/crypto";
 import { getGoogleSheetEnvConfig } from "@/lib/sheets/config";
 import {
   getUrlSearchHints,
+  MIN_MATCH_SCORE,
   normalizeSheetUrl,
-  urlsMatchForJobLookup,
+  scoreUrlMatch,
 } from "@/lib/sheets/url-match";
 
 const UPSERT_BATCH_SIZE = 25;
@@ -239,7 +240,7 @@ export async function syncSheetJobsForUser(userId: string): Promise<{
 }
 
 export async function matchJobByUrl(userId: string, url: string) {
-  const normalized = normalizeUrl(url);
+  const normalized = normalizeUrl(normalizeSheetUrl(url));
 
   const mapping = await prisma.urlMapping.findUnique({
     where: { userId_appUrlNormalized: { userId, appUrlNormalized: normalized } },
@@ -269,21 +270,25 @@ export async function matchJobByUrl(userId: string, url: string) {
           orderBy: { syncedAt: "desc" },
           take: 100,
         })
-      : [];
-
-  const jobs =
-    candidateJobs.length > 0
-      ? candidateJobs
       : await prisma.sheetJob.findMany({
           where: { userId },
           orderBy: { syncedAt: "desc" },
           take: 500,
         });
 
-  for (const job of jobs) {
-    if (urlsMatchForJobLookup(job.url, url)) {
-      return job;
+  let bestJob: (typeof candidateJobs)[number] | null = null;
+  let bestScore = 0;
+
+  for (const job of candidateJobs) {
+    const score = scoreUrlMatch(job.url, url);
+    if (score > bestScore) {
+      bestScore = score;
+      bestJob = job;
     }
+  }
+
+  if (bestScore >= MIN_MATCH_SCORE) {
+    return bestJob;
   }
 
   return null;
@@ -294,7 +299,7 @@ export async function rememberApplicationUrl(
   sheetJobId: string,
   applicationUrl: string,
 ) {
-  const appUrlNormalized = normalizeUrl(applicationUrl);
+  const appUrlNormalized = normalizeUrl(normalizeSheetUrl(applicationUrl));
   await prisma.urlMapping.upsert({
     where: { userId_appUrlNormalized: { userId, appUrlNormalized } },
     create: { userId, sheetJobId, applicationUrl, appUrlNormalized },
