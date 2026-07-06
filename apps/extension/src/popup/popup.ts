@@ -36,7 +36,14 @@ async function getActiveTabState(): Promise<TabState | null> {
   return response as TabState | null;
 }
 
-function renderState(state: TabState | null) {
+function renderState(state: TabState | null, errorMessage?: string | null) {
+  if (errorMessage) {
+    jobMatch.textContent = errorMessage;
+    fieldCount.textContent = "";
+    fillButton.disabled = true;
+    return;
+  }
+
   if (!state) {
     jobMatch.textContent = "No tab state yet.";
     fieldCount.textContent = "";
@@ -57,8 +64,18 @@ function renderState(state: TabState | null) {
 }
 
 async function refresh() {
-  const state = await getActiveTabState();
-  renderState(state);
+  try {
+    const state = await getActiveTabState();
+    renderState(state);
+  } catch (error) {
+    const message =
+      error instanceof Error && error.message.includes("Extension context invalidated")
+        ? "Extension was reloaded. Refresh this page, then reopen the popup."
+        : error instanceof Error
+          ? error.message
+          : "Could not read tab state.";
+    renderState(null, message);
+  }
 }
 
 fillButton.addEventListener("click", async () => {

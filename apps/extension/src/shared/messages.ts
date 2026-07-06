@@ -42,8 +42,14 @@ export type RuntimeMessage =
   | { type: "FILL_TAB"; tabId: number }
   | { type: "APPLY_FILL"; values: Record<string, string> };
 
+import {
+  isExtensionContextInvalidated,
+  isRuntimeAvailable,
+  safeGetLocalStorage,
+} from "./extension-context";
+
 export async function getSettings() {
-  const result = await chrome.storage.local.get(["apiBaseUrl", "extensionToken"]);
+  const result = await safeGetLocalStorage(["apiBaseUrl", "extensionToken"]);
   return {
     apiBaseUrl: (result.apiBaseUrl as string | undefined) ?? "http://localhost:3000",
     extensionToken: result.extensionToken as string | undefined,
