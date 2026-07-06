@@ -34,6 +34,8 @@ cp apps/web/.env.example apps/web/.env.local
 - `NEXTAUTH_URL=http://localhost:3000`
 - `GOOGLE_CLIENT_ID`
 - `GOOGLE_CLIENT_SECRET`
+- `GOOGLE_SHEETS_ID`
+- `GOOGLE_REFRESH_TOKEN`
 - `OPENAI_API_KEY` (optional fallback for resume parsing at signup)
 
 4. Initialize database:
@@ -61,9 +63,8 @@ npm run extension:build
 1. Sign up at `/signup` with all required US application fields + **resume PDF upload** (text is extracted and parsed into work/edu/skills).
 2. Log in and open `/settings`:
    - Save OpenAI API key (stored server-side on profile)
-   - Paste spreadsheet ID
-   - Connect Google OAuth
-   - Sync `For Resume` tab
+   - Ensure Google Sheet env vars are set (see `.env.example`)
+   - Click **Sync For Resume tab**
 3. Open `/extension` and create an extension token.
 4. Paste token + API URL into extension popup.
 5. Open ATS application tabs → popup shows JD match + field count → click **Fill this tab**.

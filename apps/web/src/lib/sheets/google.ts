@@ -1,51 +1,32 @@
 import { google } from "googleapis";
 import { prisma } from "@/lib/db";
 import { normalizeUrl, sheetRowHash } from "@/lib/crypto";
-import { SHEET_TAB_NAME } from "@app/shared";
+import { getGoogleSheetEnvConfig } from "@/lib/sheets/config";
 
-const SHEET_RANGE = `'${SHEET_TAB_NAME}'!A2:J`;
-
-function getOAuthClient() {
+function getOAuthClient(clientId: string, clientSecret: string) {
   return new google.auth.OAuth2(
-    process.env.GOOGLE_CLIENT_ID,
-    process.env.GOOGLE_CLIENT_SECRET,
+    clientId,
+    clientSecret,
     `${process.env.NEXTAUTH_URL}/api/sheets/callback`,
   );
 }
 
-export function getGoogleAuthUrl(state: string): string {
-  const client = getOAuthClient();
-  return client.generateAuthUrl({
-    access_type: "offline",
-    prompt: "consent",
-    scope: ["https://www.googleapis.com/auth/spreadsheets.readonly"],
-    state,
-  });
-}
-
-export async function exchangeGoogleCode(code: string) {
-  const client = getOAuthClient();
-  const { tokens } = await client.getToken(code);
-  return tokens;
+function getSheetRange(sheetTabName: string): string {
+  return `'${sheetTabName}'!A2:J`;
 }
 
 export async function syncSheetJobsForUser(userId: string): Promise<number> {
-  const account = await prisma.googleSheetAccount.findUnique({ where: { userId } });
-  if (!account?.spreadsheetId) {
-    throw new Error("Google Sheet is not connected");
-  }
+  const config = getGoogleSheetEnvConfig();
 
-  const client = getOAuthClient();
+  const client = getOAuthClient(config.clientId, config.clientSecret);
   client.setCredentials({
-    access_token: account.accessToken,
-    refresh_token: account.refreshToken,
-    expiry_date: account.expiresAt.getTime(),
+    refresh_token: config.refreshToken,
   });
 
   const sheets = google.sheets({ version: "v4", auth: client });
   const response = await sheets.spreadsheets.values.get({
-    spreadsheetId: account.spreadsheetId,
-    range: SHEET_RANGE,
+    spreadsheetId: config.spreadsheetId,
+    range: getSheetRange(config.sheetTabName),
   });
 
   const rows = response.data.values ?? [];
@@ -112,11 +93,6 @@ export async function syncSheetJobsForUser(userId: string): Promise<number> {
 
     upserted += 1;
   }
-
-  await prisma.googleSheetAccount.update({
-    where: { userId },
-    data: { lastSyncedAt: new Date() },
-  });
 
   return upserted;
 }
