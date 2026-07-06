@@ -43,7 +43,6 @@ export type RuntimeMessage =
   | { type: "APPLY_FILL"; values: Record<string, string> };
 
 import {
-  isExtensionContextInvalidated,
   isRuntimeAvailable,
   safeGetLocalStorage,
 } from "./extension-context";
@@ -59,6 +58,9 @@ export async function getSettings() {
 export async function apiFetch(path: string, init?: RequestInit) {
   const { apiBaseUrl, extensionToken } = await getSettings();
   if (!extensionToken) {
+    if (!isRuntimeAvailable()) {
+      throw new Error("Extension context invalidated. Reload this tab.");
+    }
     throw new Error("Extension token missing. Connect it from the web app.");
   }
 

@@ -88,10 +88,13 @@ async function publishSnapshot() {
           : "Could not look up JD match. Check extension token and API URL.";
     }
 
-    await safeSendRuntimeMessage({
+    const sent = await safeSendRuntimeMessage({
       type: "TAB_FORM_SNAPSHOT",
       snapshot,
     });
+    if (!sent) {
+      stopContentScript();
+    }
   } catch (error) {
     if (isExtensionContextInvalidated(error)) {
       stopContentScript();
@@ -137,13 +140,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 
   return false;
-});
-
-window.addEventListener("unhandledrejection", (event) => {
-  if (isExtensionContextInvalidated(event.reason)) {
-    event.preventDefault();
-    stopContentScript();
-  }
 });
 
 if (shouldActivateContentScript()) {

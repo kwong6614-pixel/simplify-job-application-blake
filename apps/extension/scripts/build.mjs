@@ -20,7 +20,7 @@ const common = {
   outdir: dist,
   entryPoints: {
     background: join(root, "src/background/service-worker.ts"),
-    content: join(root, "src/content/detector.ts"),
+    content: join(root, "src/content/index.ts"),
     popup: join(root, "src/popup/popup.ts"),
   },
 };
