@@ -72,7 +72,7 @@ export default function SettingsForm() {
           : "missing required env vars"}
       </p>
       <p className="text-sm text-slate-700">
-        Tabs: {sheetTabNames.length > 0 ? sheetTabNames.join(", ") : "For Resume, All Jobs"}
+        Tabs: {sheetTabNames.length > 0 ? sheetTabNames.join(", ") : "For Resume"}
       </p>
       <p className="text-sm text-slate-700">
         Last sync:{" "}

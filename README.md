@@ -4,7 +4,7 @@ Simplify-style US job application autofill:
 
 - **Web app (`apps/web`)**: signup with full profile + resume parse, settings (OpenAI key, Google Sheet OAuth), extension token
 - **Chrome extension (`apps/extension`)**: per-tab JD match, text-field detection, one Fill button per tab
-- **Google Sheet**: `For Resume` and `All Jobs` tabs (columns A–J)
+- **Google Sheet**: `For Resume` tab (columns A–J)
 
 ## Prerequisites
 
@@ -64,7 +64,7 @@ npm run extension:build
 2. Log in and open `/settings`:
    - Save OpenAI API key (stored server-side on profile)
    - Ensure Google Sheet env vars are set (see `.env.example`)
-   - Click **Sync sheet tabs** (defaults: `For Resume`, `All Jobs`)
+   - Click **Sync sheet tabs** (default: `For Resume`)
 3. Open `/extension` and create an extension token.
 4. Paste token + API URL into extension popup.
 5. Open ATS application tabs → popup shows JD match + field count → click **Fill this tab**.

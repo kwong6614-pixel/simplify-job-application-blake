@@ -2,6 +2,7 @@ import { normalizeUrl } from "@/lib/crypto";
 
 const STRONG_SIGNATURE_PREFIXES = [
   "greenhouse:job:",
+  "greenhouse:jr_id:",
   "greenhouse:",
   "lever:job:",
   "ashby:job:",
@@ -26,21 +27,38 @@ function addGreenhouseSignatures(
   path: string,
   signatures: Set<string>,
 ): void {
+  const forSlug = parsed.searchParams.get("for")?.trim().toLowerCase();
+  const jrId = parsed.searchParams.get("jr_id")?.trim().toLowerCase();
+  const embedToken = parsed.searchParams.get("token")?.trim();
+  const ghJid = parsed.searchParams.get("gh_jid")?.trim();
   const ghPathId = path.match(/\/jobs\/(\d+)/)?.[1];
-  const ghQueryId = parsed.searchParams.get("gh_jid");
-  const ghEmbedId = parsed.searchParams.get("token")
-    ? parsed.searchParams.get("for")
-    : null;
-  const greenhouseId = ghPathId || ghQueryId || ghEmbedId;
 
-  if (greenhouseId && /^\d+$/.test(greenhouseId)) {
-    signatures.add(`greenhouse:job:${greenhouseId}`);
+  const numericJobId =
+    ghPathId ||
+    ghJid ||
+    (embedToken && /^\d+$/.test(embedToken) ? embedToken : null);
+
+  if (numericJobId) {
+    signatures.add(`greenhouse:job:${numericJobId}`);
+  }
+
+  if (jrId) {
+    signatures.add(`greenhouse:jr_id:${jrId}`);
+    signatures.add(`path-job:${jrId}`);
+  }
+
+  if (forSlug && numericJobId) {
+    signatures.add(`greenhouse:${forSlug}:${numericJobId}`);
+  }
+
+  if (forSlug && jrId) {
+    signatures.add(`greenhouse:${forSlug}:${jrId}`);
   }
 
   const host = parsed.hostname.replace(/^www\./i, "").toLowerCase();
   const hosted = host.match(/^([^.]+)\.greenhouse\.io$/);
-  if (hosted && greenhouseId && /^\d+$/.test(greenhouseId)) {
-    signatures.add(`greenhouse:${hosted[1].toLowerCase()}:${greenhouseId}`);
+  if (hosted && numericJobId) {
+    signatures.add(`greenhouse:${hosted[1].toLowerCase()}:${numericJobId}`);
   }
 
   const boards = path.match(/^\/([^/]+)\/jobs\/(\d+)/);
@@ -165,8 +183,21 @@ export function getUrlSearchHints(url: string): string[] {
       hints.add("greenhouse.io");
     }
 
+    const forSlug = parsed.searchParams.get("for");
+    if (forSlug) hints.add(forSlug);
+
+    const jrId = parsed.searchParams.get("jr_id");
+    if (jrId) hints.add(jrId);
+
+    const embedToken = parsed.searchParams.get("token");
+    if (embedToken && /^\d+$/.test(embedToken)) {
+      hints.add(embedToken);
+    }
+
     const ghId =
-      parsed.pathname.match(/\/jobs\/(\d+)/)?.[1] || parsed.searchParams.get("gh_jid");
+      parsed.pathname.match(/\/jobs\/(\d+)/)?.[1] ||
+      parsed.searchParams.get("gh_jid") ||
+      (embedToken && /^\d+$/.test(embedToken) ? embedToken : null);
     if (ghId) hints.add(ghId);
 
     const boards = parsed.pathname.match(/^\/([^/]+)\/jobs\/(\d+)/);
