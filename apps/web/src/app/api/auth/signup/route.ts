@@ -127,7 +127,9 @@ export async function POST(request: Request) {
     const saved = await saveResumePdf(user.id, originalFileName, pdfBuffer);
     await prisma.profile.update({
       where: { userId: user.id },
-      data: { resumeFileUrl: saved.storedName },
+      data: {
+        resumeFileUrl: saved.storedPath ? saved.storedName : null,
+      },
     });
 
     return NextResponse.json({ user }, { status: 201 });
