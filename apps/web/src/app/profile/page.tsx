@@ -2,6 +2,9 @@ import Link from "next/link";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
 import { redirect } from "next/navigation";
+import { ensureSheetSyncedForUser } from "@/lib/sheets/auto-sync";
+import { getAutoSyncSheetTabNames, isGoogleSheetEnvConfigured } from "@/lib/sheets/config";
+import DashboardSync from "@/components/dashboard-sync";
 
 export default async function ProfilePage() {
   const session = await auth();
@@ -18,24 +21,50 @@ export default async function ProfilePage() {
 
   if (!profile) redirect("/signup");
 
+  let autoSyncMessage: string | null = null;
+  if (isGoogleSheetEnvConfigured()) {
+    try {
+      const result = await ensureSheetSyncedForUser(session.user.id);
+      if (result.ran && result.synced !== undefined) {
+        autoSyncMessage = `Synced ${result.synced} jobs from the sheet.`;
+      }
+    } catch {
+      autoSyncMessage = null;
+    }
+  }
+
+  const [syncStats, syncedJobCount] = await Promise.all([
+    prisma.sheetJob.aggregate({
+      where: { userId: session.user.id },
+      _max: { syncedAt: true },
+    }),
+    prisma.sheetJob.count({
+      where: { userId: session.user.id },
+    }),
+  ]);
+
   return (
     <main className="mx-auto max-w-4xl px-6 py-12">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-semibold">Profile</h1>
+          <h1 className="text-3xl font-semibold">Dashboard</h1>
           <p className="mt-2 text-slate-600">{session.user.email}</p>
         </div>
-        <div className="flex gap-3 text-sm">
-          <Link href="/settings" className="text-indigo-600 hover:underline">
-            Settings
-          </Link>
-          <Link href="/extension" className="text-indigo-600 hover:underline">
-            Extension
-          </Link>
-        </div>
+        <Link href="/extension" className="text-sm text-indigo-600 hover:underline">
+          Extension
+        </Link>
       </div>
 
-      <section className="mt-8 grid gap-4 rounded-xl border bg-white p-6 md:grid-cols-2">
+      <DashboardSync
+        sheetConfigured={isGoogleSheetEnvConfigured()}
+        sheetTabName={getAutoSyncSheetTabNames()[0] ?? "For Resume"}
+        lastSheetSyncAt={syncStats._max.syncedAt?.toISOString() ?? null}
+        syncedJobCount={syncedJobCount}
+        autoSyncEnabled={isGoogleSheetEnvConfigured()}
+        autoSyncMessage={autoSyncMessage}
+      />
+
+      <section className="mt-6 grid gap-4 rounded-xl border bg-white p-6 md:grid-cols-2">
         <div>
           <h2 className="font-medium">Personal</h2>
           <p className="mt-2 text-sm text-slate-700">

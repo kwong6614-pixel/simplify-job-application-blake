@@ -9,24 +9,15 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const tokens = await prisma.extensionToken.findMany({
+  const tokenCount = await prisma.extensionToken.count({
     where: {
       userId: session.user.id,
       expiresAt: { gt: new Date() },
     },
-    orderBy: [{ lastUsedAt: "desc" }, { createdAt: "desc" }],
-    select: {
-      id: true,
-      label: true,
-      expiresAt: true,
-      lastUsedAt: true,
-      createdAt: true,
-    },
   });
 
   return NextResponse.json({
-    connected: tokens.length > 0,
-    tokens,
+    connected: tokenCount > 0,
   });
 }
 
