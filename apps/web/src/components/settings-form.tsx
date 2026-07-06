@@ -6,6 +6,7 @@ export default function SettingsForm() {
   const [openaiApiKey, setOpenaiApiKey] = useState("");
   const [sheetConfigured, setSheetConfigured] = useState(false);
   const [spreadsheetId, setSpreadsheetId] = useState<string | null>(null);
+  const [sheetTabNames, setSheetTabNames] = useState<string[]>([]);
   const [status, setStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -15,6 +16,7 @@ export default function SettingsForm() {
       .then((data) => {
         setSheetConfigured(Boolean(data.sheetConfigured));
         setSpreadsheetId(data.spreadsheetId ?? null);
+        setSheetTabNames(Array.isArray(data.sheetTabNames) ? data.sheetTabNames : []);
       })
       .catch(() => undefined);
   }, []);
@@ -37,7 +39,11 @@ export default function SettingsForm() {
     const response = await fetch("/api/jobs/sync", { method: "POST" });
     const data = await response.json();
     setLoading(false);
-    setStatus(response.ok ? `Synced ${data.synced} rows.` : data.error);
+    setStatus(
+      response.ok
+        ? `Synced ${data.synced} rows${data.tabs ? ` (${Object.entries(data.tabs).map(([tab, count]) => `${tab}: ${count}`).join(", ")})` : ""}.`
+        : data.error,
+    );
   }
 
   return (
@@ -73,13 +79,16 @@ export default function SettingsForm() {
           ? `configured${spreadsheetId ? ` (${spreadsheetId})` : ""}`
           : "missing required env vars"}
       </p>
+      <p className="text-sm text-slate-700">
+        Tabs: {sheetTabNames.length > 0 ? sheetTabNames.join(", ") : "For Resume, All Jobs"}
+      </p>
       <button
         type="button"
         onClick={syncSheet}
         disabled={loading || !sheetConfigured}
         className="rounded-lg border border-slate-300 px-4 py-2 hover:bg-slate-50 disabled:opacity-50"
       >
-        Sync For Resume tab
+        Sync sheet tabs
       </button>
 
       {status ? <p className="text-sm text-slate-700">{status}</p> : null}

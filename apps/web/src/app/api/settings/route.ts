@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
-import { isGoogleSheetEnvConfigured } from "@/lib/sheets/config";
+import { isGoogleSheetEnvConfigured, getSheetTabNames } from "@/lib/sheets/config";
 import { z } from "zod";
 
 const settingsSchema = z.object({
@@ -20,7 +20,7 @@ export async function GET() {
     hasOpenAiKey: Boolean(profile?.openaiApiKeyEnc),
     sheetConfigured: isGoogleSheetEnvConfigured(),
     spreadsheetId: process.env.GOOGLE_SHEETS_ID ?? null,
-    sheetTabName: process.env.GOOGLE_SHEET_TAB_NAME ?? "For Resume",
+    sheetTabNames: getSheetTabNames(),
   });
 }
 

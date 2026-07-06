@@ -133,6 +133,8 @@ export interface FillGenerateResponse {
 }
 
 export const SHEET_TAB_NAME = "For Resume";
+export const ALL_JOBS_TAB_NAME = "All Jobs";
+export const DEFAULT_SHEET_TAB_NAMES = [SHEET_TAB_NAME, ALL_JOBS_TAB_NAME] as const;
 
 export const SHEET_COLUMNS = {
   date: "A",

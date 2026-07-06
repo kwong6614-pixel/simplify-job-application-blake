@@ -18,8 +18,8 @@ export async function POST(request: Request) {
   }
 
   try {
-    const count = await syncSheetJobsForUser(userId);
-    return NextResponse.json({ synced: count });
+    const result = await syncSheetJobsForUser(userId);
+    return NextResponse.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Sync failed";
     return NextResponse.json({ error: message }, { status: 400 });
