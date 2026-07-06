@@ -45,7 +45,7 @@ export async function generateAiFillValues(
   };
 
   const response = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
+    model: process.env.OPENAI_MODEL,
     temperature: 0.2,
     response_format: { type: "json_object" },
     messages: [
