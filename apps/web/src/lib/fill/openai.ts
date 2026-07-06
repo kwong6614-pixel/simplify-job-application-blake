@@ -1,7 +1,7 @@
 import OpenAI from "openai";
 import type { FormField } from "@app/shared";
 import type { SheetJob } from "@prisma/client";
-import { getOpenAiModel } from "@/lib/openai-config";
+import { getOpenAiModel, chatTemperatureOption } from "@/lib/openai-config";
 import { getApplicationFillPrompt } from "@/lib/prompts";
 import { profileToUserProfile } from "@/lib/fill/rules";
 import type { Profile, WorkExperience, Education, Skill } from "@prisma/client";
@@ -45,9 +45,10 @@ export async function generateAiFillValues(
     })),
   };
 
+  const model = getOpenAiModel();
   const response = await openai.chat.completions.create({
-    model: getOpenAiModel(),
-    temperature: 0.2,
+    model,
+    ...chatTemperatureOption(model, 0.2),
     response_format: { type: "json_object" },
     messages: [
       { role: "system", content: systemPrompt },

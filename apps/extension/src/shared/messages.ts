@@ -49,7 +49,20 @@ export type RuntimeMessage =
   | { type: "TAB_FORM_SNAPSHOT"; snapshot: FormSnapshot }
   | { type: "FILL_TAB"; tabId: number }
   | { type: "APPLY_FILL"; values: Record<string, string>; fields: FormField[] }
-  | { type: "REFRESH_SNAPSHOT" };
+  | { type: "REFRESH_SNAPSHOT" }
+  | { type: "TAB_READY_UPDATE"; state: TabReadyPayload }
+  | { type: "TAB_NOT_READY" };
+
+/** Lightweight state sent to the content script for the on-page panel. */
+export type TabReadyPayload = {
+  url: string;
+  atsPlatform: string;
+  fieldCount: number;
+  job?: {
+    company: string;
+    role: string;
+  };
+};
 
 import {
   isRuntimeAvailable,

@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { getOpenAiModel } from "@/lib/openai-config";
+import { getOpenAiModel, chatTemperatureOption } from "@/lib/openai-config";
 
 export interface ParsedResume {
   workExperiences: Array<{
@@ -133,7 +133,7 @@ export async function parseResumeText(resumeText: string): Promise<ParseResumeRe
   try {
     const response = await openai.chat.completions.create({
       model,
-      temperature: 0,
+      ...chatTemperatureOption(model, 0),
       response_format: { type: "json_object" },
       messages: [
         {

@@ -1,8 +1,15 @@
-import { apiFetch, isTabReady, type FormSnapshot, type TabState } from "../shared/messages";
+import {
+  apiFetch,
+  isTabReady,
+  type FormSnapshot,
+  type TabReadyPayload,
+  type TabState,
+} from "../shared/messages";
 
 /** One entry per open tab — tabs never share or overwrite each other's state. */
 const tabStates = new Map<number, TabState>();
 const fillsInFlight = new Set<number>();
+const autoPopupOpenedTabs = new Set<number>();
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   void handleMessage(message, sender.tab?.id).then(sendResponse);
@@ -28,10 +35,63 @@ async function handleMessage(
     return fillTab(message.tabId);
   }
 
+  if (message.type === "FILL_THIS_TAB" && senderTabId) {
+    return fillTab(senderTabId);
+  }
+
   return { error: "Unknown message" };
 }
 
+function toReadyPayload(state: TabState): TabReadyPayload {
+  return {
+    url: state.url,
+    atsPlatform: state.atsPlatform,
+    fieldCount: state.fields.length,
+    job: state.job,
+  };
+}
+
+async function notifyTabReady(tabId: number, state: TabState) {
+  try {
+    await chrome.tabs.sendMessage(tabId, {
+      type: "TAB_READY_UPDATE",
+      state: toReadyPayload(state),
+    });
+  } catch {
+    // Content script not available on this page yet.
+  }
+}
+
+async function notifyTabNotReady(tabId: number) {
+  try {
+    await chrome.tabs.sendMessage(tabId, { type: "TAB_NOT_READY" });
+  } catch {
+    // Content script not available on this page yet.
+  }
+}
+
+async function tryAutoOpenPopup(tabId: number) {
+  if (autoPopupOpenedTabs.has(tabId)) return;
+  if (typeof chrome.action.openPopup !== "function") return;
+
+  try {
+    const tab = await chrome.tabs.get(tabId);
+    if (!tab.active) return;
+
+    const window = await chrome.windows.get(tab.windowId);
+    if (!window.focused) return;
+
+    await chrome.action.openPopup({ tabId, windowId: tab.windowId });
+    autoPopupOpenedTabs.add(tabId);
+  } catch {
+    // Popup auto-open is best-effort; the on-page panel still appears.
+  }
+}
+
 async function enrichAndStoreTabState(tabId: number, snapshot: FormSnapshot) {
+  const previous = tabStates.get(tabId);
+  const wasReady = isTabReady(previous);
+
   const state: TabState = { ...snapshot, matched: false };
 
   try {
@@ -50,7 +110,18 @@ async function enrichAndStoreTabState(tabId: number, snapshot: FormSnapshot) {
   }
 
   tabStates.set(tabId, state);
-  setTabEnabled(tabId, isTabReady(state));
+  const nowReady = isTabReady(state);
+  setTabEnabled(tabId, nowReady);
+
+  if (nowReady) {
+    await notifyTabReady(tabId, state);
+    if (!wasReady) {
+      await tryAutoOpenPopup(tabId);
+    }
+  } else {
+    autoPopupOpenedTabs.delete(tabId);
+    await notifyTabNotReady(tabId);
+  }
 }
 
 function setTabEnabled(tabId: number, enabled: boolean) {
@@ -93,9 +164,18 @@ async function fillTab(tabId: number) {
   }
 }
 
+chrome.tabs.onActivated.addListener(({ tabId }) => {
+  const state = tabStates.get(tabId);
+  if (!isTabReady(state)) return;
+
+  void notifyTabReady(tabId, state);
+  void tryAutoOpenPopup(tabId);
+});
+
 chrome.tabs.onRemoved.addListener((tabId) => {
   tabStates.delete(tabId);
   fillsInFlight.delete(tabId);
+  autoPopupOpenedTabs.delete(tabId);
 });
 
 export {};

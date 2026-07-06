@@ -1,4 +1,4 @@
-import { type FormField, type FormSnapshot } from "../shared/messages";
+import { type FormField, type FormSnapshot, type TabReadyPayload } from "../shared/messages";
 import {
   isExtensionContextInvalidated,
   isRuntimeAvailable,
@@ -7,6 +7,11 @@ import {
 import { shouldActivateContentScript } from "../shared/page-guard";
 import { applyFill, collectFields, getAtsPlatform } from "./filler";
 import { clearComboboxRegistry } from "./ats/combobox-registry";
+import {
+  handleTabReadyMessage,
+  hideReadyPanel,
+  setReadyPanelFilling,
+} from "./ready-panel";
 
 let publishTimer: number | undefined;
 let fillInProgress = false;
@@ -73,6 +78,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   if (message.type === "APPLY_FILL") {
     fillInProgress = true;
+    setReadyPanelFilling(true);
     void applyFill(
       message.values as Record<string, string>,
       (message.fields as FormField[] | undefined) ?? [],
@@ -85,8 +91,21 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       })
       .finally(() => {
         fillInProgress = false;
+        setReadyPanelFilling(false);
         schedulePublish();
       });
+    return true;
+  }
+
+  if (message.type === "TAB_READY_UPDATE") {
+    handleTabReadyMessage(message.state as TabReadyPayload);
+    sendResponse({ ok: true });
+    return true;
+  }
+
+  if (message.type === "TAB_NOT_READY") {
+    hideReadyPanel();
+    sendResponse({ ok: true });
     return true;
   }
 
