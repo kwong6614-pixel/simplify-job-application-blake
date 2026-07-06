@@ -4,6 +4,7 @@ import {
   isRuntimeAvailable,
   safeSendRuntimeMessage,
 } from "../shared/extension-context";
+import { shouldActivateContentScript } from "../shared/page-guard";
 import { applyFill, collectFields, getAtsPlatform } from "./filler";
 import { clearComboboxRegistry } from "./ats/combobox-registry";
 
@@ -25,7 +26,7 @@ function stopContentScript(): void {
 }
 
 function schedulePublish() {
-  if (contentScriptStopped || !isRuntimeAvailable()) {
+  if (contentScriptStopped || !shouldActivateContentScript()) {
     stopContentScript();
     return;
   }
@@ -43,7 +44,7 @@ function schedulePublish() {
 }
 
 async function publishSnapshot() {
-  if (contentScriptStopped || !isRuntimeAvailable()) {
+  if (contentScriptStopped || !shouldActivateContentScript()) {
     stopContentScript();
     return;
   }
@@ -138,7 +139,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   return false;
 });
 
-if (isRuntimeAvailable()) {
+window.addEventListener("unhandledrejection", (event) => {
+  if (isExtensionContextInvalidated(event.reason)) {
+    event.preventDefault();
+    stopContentScript();
+  }
+});
+
+if (shouldActivateContentScript()) {
   void publishSnapshot().catch((error) => {
     if (isExtensionContextInvalidated(error)) {
       stopContentScript();

@@ -16,6 +16,15 @@
   "content_scripts": [
     {
       "matches": ["https://*/*", "http://*/*"],
+      "exclude_matches": [
+        "*://vercel.com/*",
+        "*://*.vercel.com/*",
+        "*://*.vercel.app/*",
+        "*://github.com/*",
+        "*://*.github.com/*",
+        "*://supabase.com/*",
+        "*://*.supabase.com/*"
+      ],
       "js": ["content.js"],
       "run_at": "document_idle"
     }
