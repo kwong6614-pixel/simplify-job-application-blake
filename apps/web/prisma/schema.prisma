@@ -67,6 +67,7 @@ model Profile {
   resumeFileName       String?
   resumeFileUrl        String?
   resumeParsedAt       DateTime?
+  lastSheetSyncAt      DateTime?
   openaiApiKeyEnc      String?
 
   workExperiences WorkExperience[]

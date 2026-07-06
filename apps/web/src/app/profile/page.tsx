@@ -25,9 +25,13 @@ export default async function ProfilePage() {
   const { workExperiences, educations, skills } = profile;
 
   let autoSyncMessage: string | null = null;
+  let lastSheetSyncAt: string | null = profile.lastSheetSyncAt?.toISOString() ?? null;
   if (isGoogleSheetEnvConfigured()) {
     try {
       const result = await ensureSheetSyncedForUser(session.user.id);
+      if (result.lastSheetSyncAt) {
+        lastSheetSyncAt = result.lastSheetSyncAt;
+      }
       if (result.ran && result.synced !== undefined) {
         autoSyncMessage = `Synced ${result.synced} jobs from the sheet.`;
       }
@@ -36,15 +40,9 @@ export default async function ProfilePage() {
     }
   }
 
-  const [syncStats, syncedJobCount] = await Promise.all([
-    prisma.sheetJob.aggregate({
-      where: { userId: session.user.id },
-      _max: { syncedAt: true },
-    }),
-    prisma.sheetJob.count({
-      where: { userId: session.user.id },
-    }),
-  ]);
+  const syncedJobCount = await prisma.sheetJob.count({
+    where: { userId: session.user.id },
+  });
 
   const initialProfile: DashboardProfileInitial = {
     firstName: profile.firstName,
@@ -121,7 +119,7 @@ export default async function ProfilePage() {
       <DashboardSync
         sheetConfigured={isGoogleSheetEnvConfigured()}
         sheetTabName={getAutoSyncSheetTabNames()[0] ?? "For Resume"}
-        lastSheetSyncAt={syncStats._max.syncedAt?.toISOString() ?? null}
+        lastSheetSyncAt={lastSheetSyncAt}
         syncedJobCount={syncedJobCount}
         autoSyncEnabled={isGoogleSheetEnvConfigured()}
         autoSyncMessage={autoSyncMessage}

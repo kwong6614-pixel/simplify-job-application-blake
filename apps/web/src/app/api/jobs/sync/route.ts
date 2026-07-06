@@ -30,6 +30,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       synced: result.synced ?? 0,
       tabs: result.tabs ?? {},
+      lastSheetSyncAt: result.lastSheetSyncAt ?? null,
       auto: false,
     });
   } catch (error) {

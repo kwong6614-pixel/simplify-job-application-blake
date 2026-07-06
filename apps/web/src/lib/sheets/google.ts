@@ -215,7 +215,17 @@ export async function syncSheetJobsFromRows(
   }
 
   const synced = await upsertPreparedJobs(preparedJobs);
+  await recordSheetSyncForUser(userId);
   return { synced, tabs };
+}
+
+export async function recordSheetSyncForUser(userId: string): Promise<Date> {
+  const lastSheetSyncAt = new Date();
+  await prisma.profile.update({
+    where: { userId },
+    data: { lastSheetSyncAt },
+  });
+  return lastSheetSyncAt;
 }
 
 export async function syncSheetJobsForUser(userId: string): Promise<{

@@ -11,6 +11,7 @@
     "db:generate": "prisma generate",
     "db:migrate": "dotenv -e .env.local -- prisma migrate dev",
     "db:push": "dotenv -e .env.local -- node scripts/db-push.mjs",
+    "db:apply-sync": "dotenv -e .env.local -- node scripts/apply-sync-schema.mjs",
     "db:push:prisma": "dotenv -e .env.local -- prisma db push"
   },
   "dependencies": {

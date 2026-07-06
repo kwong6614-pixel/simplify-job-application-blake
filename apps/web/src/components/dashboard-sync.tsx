@@ -32,7 +32,11 @@ export default function DashboardSync({
     setLoading(false);
 
     if (response.ok) {
-      setLastSheetSyncAt(new Date().toISOString());
+      if (data.lastSheetSyncAt) {
+        setLastSheetSyncAt(data.lastSheetSyncAt);
+      } else {
+        setLastSheetSyncAt(new Date().toISOString());
+      }
       setSyncedJobCount(Number(data.synced ?? syncedJobCount));
       setStatus(`Synced ${data.synced} jobs from ${sheetTabName}.`);
       return;
