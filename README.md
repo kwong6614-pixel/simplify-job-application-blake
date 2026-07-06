@@ -111,3 +111,13 @@ PostgreSQL
 - OpenAI key stored server-side only
 - Token usage is not written back to the sheet
 - Resume PDFs stored locally in `apps/web/uploads/resumes/` (max 5 MB, text-based PDFs only)
+
+## Vercel + Supabase
+
+Set `DATABASE_URL` in Vercel to Supabase's **transaction pooler** (port **6543**) with `pgbouncer=true`:
+
+```text
+postgresql://postgres.[PROJECT-REF]:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:6543/postgres?pgbouncer=true
+```
+
+The app also auto-appends `pgbouncer=true` when it detects a Supabase pooler URL without it. Without this, Prisma can fail with `prepared statement "s0" already exists`.
