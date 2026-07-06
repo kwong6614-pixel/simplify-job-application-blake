@@ -63,6 +63,16 @@ button:disabled {
   border: 1px solid #cbd5e1;
 }
 
+.connection-status {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: #047857;
+}
+
+.connection-status.warning {
+  color: #b45309;
+}
+
 .message {
   margin-top: 10px;
   font-size: 12px;

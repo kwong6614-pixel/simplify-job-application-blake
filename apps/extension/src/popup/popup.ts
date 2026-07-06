@@ -3,23 +3,47 @@ import { getSettings, type TabState } from "../shared/messages";
 const apiBaseUrlInput = document.getElementById("apiBaseUrl") as HTMLInputElement;
 const extensionTokenInput = document.getElementById("extensionToken") as HTMLInputElement;
 const saveSettingsButton = document.getElementById("saveSettings") as HTMLButtonElement;
+const connectionStatus = document.getElementById("connectionStatus") as HTMLParagraphElement;
 const fillButton = document.getElementById("fillButton") as HTMLButtonElement;
 const jobMatch = document.getElementById("jobMatch") as HTMLParagraphElement;
 const fieldCount = document.getElementById("fieldCount") as HTMLParagraphElement;
 const message = document.getElementById("message") as HTMLParagraphElement;
 
+function renderConnectionStatus(apiBaseUrl: string, extensionToken?: string) {
+  if (extensionToken) {
+    connectionStatus.textContent = `Connected to ${apiBaseUrl}`;
+    connectionStatus.classList.remove("warning");
+    return;
+  }
+
+  connectionStatus.textContent = "Paste your token and save connection.";
+  connectionStatus.classList.add("warning");
+}
+
+async function persistSettings(showMessage = true) {
+  const apiBaseUrl = apiBaseUrlInput.value.trim().replace(/\/+$/, "");
+  const extensionToken = extensionTokenInput.value.trim();
+
+  await chrome.storage.local.set({
+    apiBaseUrl: apiBaseUrl || "http://localhost:3000",
+    extensionToken,
+  });
+
+  apiBaseUrlInput.value = apiBaseUrl || "http://localhost:3000";
+  renderConnectionStatus(apiBaseUrlInput.value, extensionToken || undefined);
+
+  if (showMessage) {
+    message.textContent = extensionToken
+      ? "Connection saved."
+      : "Saved API URL. Add your extension token to connect.";
+  }
+}
+
 async function loadSettings() {
   const settings = await getSettings();
   apiBaseUrlInput.value = settings.apiBaseUrl;
   extensionTokenInput.value = settings.extensionToken ?? "";
-}
-
-async function saveSettings() {
-  await chrome.storage.local.set({
-    apiBaseUrl: apiBaseUrlInput.value.trim(),
-    extensionToken: extensionTokenInput.value.trim(),
-  });
-  message.textContent = "Connection saved.";
+  renderConnectionStatus(settings.apiBaseUrl, settings.extensionToken);
 }
 
 async function getActiveTabState(): Promise<TabState | null> {
@@ -68,13 +92,13 @@ async function refresh() {
     const state = await getActiveTabState();
     renderState(state);
   } catch (error) {
-    const message =
+    const errorMessage =
       error instanceof Error && error.message.includes("Extension context invalidated")
         ? "Extension was reloaded. Refresh this page, then reopen the popup."
         : error instanceof Error
           ? error.message
           : "Could not read tab state.";
-    renderState(null, message);
+    renderState(null, errorMessage);
   }
 }
 
@@ -107,8 +131,14 @@ fillButton.addEventListener("click", async () => {
 });
 
 saveSettingsButton.addEventListener("click", () => {
-  void saveSettings();
+  void persistSettings(true);
 });
+
+for (const input of [apiBaseUrlInput, extensionTokenInput]) {
+  input.addEventListener("blur", () => {
+    void persistSettings(false);
+  });
+}
 
 void loadSettings().then(refresh);
 

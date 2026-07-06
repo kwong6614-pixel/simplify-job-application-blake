@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { prisma } from "@/lib/db";
 import { getUserFromExtensionToken } from "@/lib/auth/extension";
 import { syncSheetJobsForUser } from "@/lib/sheets/google";
+
+export const runtime = "nodejs";
+export const maxDuration = 60;
 
 async function resolveUserId(request: Request) {
   const session = await auth();

@@ -3,6 +3,33 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
 import { createExtensionToken } from "@/lib/crypto";
 
+export async function GET() {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const tokens = await prisma.extensionToken.findMany({
+    where: {
+      userId: session.user.id,
+      expiresAt: { gt: new Date() },
+    },
+    orderBy: [{ lastUsedAt: "desc" }, { createdAt: "desc" }],
+    select: {
+      id: true,
+      label: true,
+      expiresAt: true,
+      lastUsedAt: true,
+      createdAt: true,
+    },
+  });
+
+  return NextResponse.json({
+    connected: tokens.length > 0,
+    tokens,
+  });
+}
+
 export async function POST() {
   const session = await auth();
   if (!session?.user?.id) {

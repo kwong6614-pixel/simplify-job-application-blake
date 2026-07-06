@@ -7,6 +7,8 @@ export default function SettingsForm() {
   const [sheetConfigured, setSheetConfigured] = useState(false);
   const [spreadsheetId, setSpreadsheetId] = useState<string | null>(null);
   const [sheetTabNames, setSheetTabNames] = useState<string[]>([]);
+  const [lastSheetSyncAt, setLastSheetSyncAt] = useState<string | null>(null);
+  const [syncedJobCount, setSyncedJobCount] = useState(0);
   const [status, setStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -18,21 +20,29 @@ export default function SettingsForm() {
         setSheetConfigured(Boolean(data.sheetConfigured));
         setSpreadsheetId(data.spreadsheetId ?? null);
         setSheetTabNames(Array.isArray(data.sheetTabNames) ? data.sheetTabNames : []);
+        setLastSheetSyncAt(data.lastSheetSyncAt ?? null);
+        setSyncedJobCount(Number(data.syncedJobCount ?? 0));
       })
       .catch(() => undefined);
   }, []);
 
   async function syncSheet() {
     setLoading(true);
-    setStatus(null);
+    setStatus("Syncing sheet tabs...");
     const response = await fetch("/api/jobs/sync", { method: "POST" });
     const data = await response.json();
     setLoading(false);
-    setStatus(
-      response.ok
-        ? `Synced ${data.synced} rows${data.tabs ? ` (${Object.entries(data.tabs).map(([tab, count]) => `${tab}: ${count}`).join(", ")})` : ""}.`
-        : data.error,
-    );
+
+    if (response.ok) {
+      setLastSheetSyncAt(new Date().toISOString());
+      setSyncedJobCount(Number(data.synced ?? syncedJobCount));
+      setStatus(
+        `Synced ${data.synced} rows${data.tabs ? ` (${Object.entries(data.tabs).map(([tab, count]) => `${tab}: ${count}`).join(", ")})` : ""}.`,
+      );
+      return;
+    }
+
+    setStatus(data.error);
   }
 
   return (
@@ -64,13 +74,19 @@ export default function SettingsForm() {
       <p className="text-sm text-slate-700">
         Tabs: {sheetTabNames.length > 0 ? sheetTabNames.join(", ") : "For Resume, All Jobs"}
       </p>
+      <p className="text-sm text-slate-700">
+        Last sync:{" "}
+        {lastSheetSyncAt
+          ? `${new Date(lastSheetSyncAt).toLocaleString()} (${syncedJobCount} jobs cached)`
+          : "not synced yet for this account"}
+      </p>
       <button
         type="button"
         onClick={syncSheet}
         disabled={loading || !sheetConfigured}
         className="rounded-lg border border-slate-300 px-4 py-2 hover:bg-slate-50 disabled:opacity-50"
       >
-        Sync sheet tabs
+        {loading ? "Syncing..." : "Sync sheet tabs"}
       </button>
 
       {status ? <p className="text-sm text-slate-700">{status}</p> : null}

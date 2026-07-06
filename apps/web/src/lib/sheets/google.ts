@@ -8,6 +8,8 @@ import {
   urlsMatchForJobLookup,
 } from "@/lib/sheets/url-match";
 
+const UPSERT_BATCH_SIZE = 25;
+
 function getOAuthClient(clientId: string, clientSecret: string) {
   return new google.auth.OAuth2(
     clientId,
@@ -32,59 +34,20 @@ type SheetRow = {
   submittedBy?: string;
 };
 
-async function upsertSheetRow(userId: string, sheetTabName: string, row: SheetRow): Promise<boolean> {
-  const { company, url } = row;
-  if (!url || !company) {
-    return false;
-  }
-
-  const normalizedUrl = normalizeSheetUrl(url);
-  const hash = sheetRowHash([
-    sheetTabName,
-    row.date ?? "",
-    company,
-    row.role ?? "",
-    row.techStack ?? "",
-    normalizedUrl,
-    row.responsibilities ?? "",
-    row.qualificationsRequired ?? "",
-    row.qualificationsPreferred ?? "",
-    row.submittedBy ?? "",
-  ]);
-
-  await prisma.sheetJob.upsert({
-    where: { userId_sheetRowHash: { userId, sheetRowHash: hash } },
-    create: {
-      userId,
-      sheetRowHash: hash,
-      date: row.date ?? null,
-      company,
-      role: row.role ?? "",
-      techStack: row.techStack ?? null,
-      url: normalizedUrl,
-      urlNormalized: normalizeUrl(normalizedUrl),
-      responsibilities: row.responsibilities ?? "",
-      qualificationsRequired: row.qualificationsRequired ?? "",
-      qualificationsPreferred: row.qualificationsPreferred ?? "",
-      submittedBy: row.submittedBy ?? null,
-    },
-    update: {
-      date: row.date ?? null,
-      company,
-      role: row.role ?? "",
-      techStack: row.techStack ?? null,
-      url: normalizedUrl,
-      urlNormalized: normalizeUrl(normalizedUrl),
-      responsibilities: row.responsibilities ?? "",
-      qualificationsRequired: row.qualificationsRequired ?? "",
-      qualificationsPreferred: row.qualificationsPreferred ?? "",
-      submittedBy: row.submittedBy ?? null,
-      syncedAt: new Date(),
-    },
-  });
-
-  return true;
-}
+type PreparedSheetJob = {
+  userId: string;
+  sheetRowHash: string;
+  date: string | null;
+  company: string;
+  role: string;
+  techStack: string | null;
+  url: string;
+  urlNormalized: string;
+  responsibilities: string;
+  qualificationsRequired: string;
+  qualificationsPreferred: string;
+  submittedBy: string | null;
+};
 
 function parseSheetRow(row: string[]): SheetRow {
   const [
@@ -113,6 +76,107 @@ function parseSheetRow(row: string[]): SheetRow {
   };
 }
 
+function prepareSheetJob(
+  userId: string,
+  sheetTabName: string,
+  row: SheetRow,
+): PreparedSheetJob | null {
+  const { company, url } = row;
+  if (!url || !company) {
+    return null;
+  }
+
+  const normalizedUrl = normalizeSheetUrl(url);
+  const hash = sheetRowHash([
+    sheetTabName,
+    row.date ?? "",
+    company,
+    row.role ?? "",
+    row.techStack ?? "",
+    normalizedUrl,
+    row.responsibilities ?? "",
+    row.qualificationsRequired ?? "",
+    row.qualificationsPreferred ?? "",
+    row.submittedBy ?? "",
+  ]);
+
+  return {
+    userId,
+    sheetRowHash: hash,
+    date: row.date ?? null,
+    company,
+    role: row.role ?? "",
+    techStack: row.techStack ?? null,
+    url: normalizedUrl,
+    urlNormalized: normalizeUrl(normalizedUrl),
+    responsibilities: row.responsibilities ?? "",
+    qualificationsRequired: row.qualificationsRequired ?? "",
+    qualificationsPreferred: row.qualificationsPreferred ?? "",
+    submittedBy: row.submittedBy ?? null,
+  };
+}
+
+async function upsertPreparedJobs(jobs: PreparedSheetJob[]): Promise<number> {
+  let upserted = 0;
+  const syncedAt = new Date();
+
+  for (let index = 0; index < jobs.length; index += UPSERT_BATCH_SIZE) {
+    const batch = jobs.slice(index, index + UPSERT_BATCH_SIZE);
+
+    await Promise.all(
+      batch.map((job) =>
+        prisma.sheetJob.upsert({
+          where: {
+            userId_sheetRowHash: {
+              userId: job.userId,
+              sheetRowHash: job.sheetRowHash,
+            },
+          },
+          create: job,
+          update: {
+            date: job.date,
+            company: job.company,
+            role: job.role,
+            techStack: job.techStack,
+            url: job.url,
+            urlNormalized: job.urlNormalized,
+            responsibilities: job.responsibilities,
+            qualificationsRequired: job.qualificationsRequired,
+            qualificationsPreferred: job.qualificationsPreferred,
+            submittedBy: job.submittedBy,
+            syncedAt,
+          },
+        }),
+      ),
+    );
+
+    upserted += batch.length;
+  }
+
+  return upserted;
+}
+
+async function fetchSheetRowsByTab(
+  sheets: ReturnType<typeof google.sheets>,
+  spreadsheetId: string,
+  sheetTabNames: string[],
+): Promise<Record<string, string[][]>> {
+  const ranges = sheetTabNames.map((tabName) => getSheetRange(tabName));
+  const response = await sheets.spreadsheets.values.batchGet({
+    spreadsheetId,
+    ranges,
+  });
+
+  const valueRanges = response.data.valueRanges ?? [];
+  const rowsByTab: Record<string, string[][]> = {};
+
+  sheetTabNames.forEach((tabName, index) => {
+    rowsByTab[tabName] = valueRanges[index]?.values ?? [];
+  });
+
+  return rowsByTab;
+}
+
 export async function syncSheetJobsForUser(userId: string): Promise<{
   synced: number;
   tabs: Record<string, number>;
@@ -125,29 +189,32 @@ export async function syncSheetJobsForUser(userId: string): Promise<{
   });
 
   const sheets = google.sheets({ version: "v4", auth: client });
+  const rowsByTab = await fetchSheetRowsByTab(
+    sheets,
+    config.spreadsheetId,
+    config.sheetTabNames,
+  );
+
   const tabs: Record<string, number> = {};
-  let synced = 0;
+  const preparedJobs: PreparedSheetJob[] = [];
 
   for (const sheetTabName of config.sheetTabNames) {
-    const response = await sheets.spreadsheets.values.get({
-      spreadsheetId: config.spreadsheetId,
-      range: getSheetRange(sheetTabName),
-    });
-
-    const rows = response.data.values ?? [];
+    const rows = rowsByTab[sheetTabName] ?? [];
     let tabCount = 0;
 
     for (const row of rows) {
       const parsed = parseSheetRow(row);
-      const upserted = await upsertSheetRow(userId, sheetTabName, parsed);
-      if (upserted) {
+      const prepared = prepareSheetJob(userId, sheetTabName, parsed);
+      if (prepared) {
+        preparedJobs.push(prepared);
         tabCount += 1;
-        synced += 1;
       }
     }
 
     tabs[sheetTabName] = tabCount;
   }
+
+  const synced = await upsertPreparedJobs(preparedJobs);
 
   return { synced, tabs };
 }
