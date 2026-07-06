@@ -13,7 +13,7 @@ function loadDatabaseUrl() {
   return url;
 }
 
-function generateSql() {
+function generateSql(connectionString) {
   const schemaPath = join(root, "..", "prisma", "schema.prisma");
   const prismaBin = join(
     root,
@@ -28,17 +28,27 @@ function generateSql() {
 
   return execFileSync(
     process.execPath,
-    [prismaBin, "migrate", "diff", "--from-empty", "--to-schema-datamodel", schemaPath, "--script"],
+    [
+      prismaBin,
+      "migrate",
+      "diff",
+      "--from-url",
+      connectionString,
+      "--to-schema-datamodel",
+      schemaPath,
+      "--script",
+    ],
     { encoding: "utf8", cwd: join(root, ".."), env: process.env },
   );
 }
 
 async function main() {
   const connectionString = loadDatabaseUrl();
-  const sql = generateSql();
+  const sql = generateSql(connectionString);
 
   if (!sql.trim()) {
-    throw new Error("No SQL generated from Prisma schema.");
+    console.log("Database schema is already up to date.");
+    return;
   }
 
   const client = new pg.Client({
