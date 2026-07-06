@@ -88,25 +88,47 @@ async function tryAutoOpenPopup(tabId: number) {
   }
 }
 
+const MATCH_REUSE_MS = 5 * 60 * 1000;
+
+function shouldRefetchJobMatch(
+  previous: TabState | undefined,
+  snapshot: FormSnapshot,
+): boolean {
+  if (!previous || previous.url !== snapshot.url) return true;
+  if (!previous.fields.length && snapshot.fields.length > 0) return true;
+  if (previous.matchedAt && Date.now() - previous.matchedAt < MATCH_REUSE_MS) {
+    return false;
+  }
+  return true;
+}
+
 async function enrichAndStoreTabState(tabId: number, snapshot: FormSnapshot) {
   const previous = tabStates.get(tabId);
   const wasReady = isTabReady(previous);
 
   const state: TabState = { ...snapshot, matched: false };
 
-  try {
-    const match = await apiFetch(`/api/jobs/match?url=${encodeURIComponent(snapshot.url)}`);
-    state.matched = Boolean(match.matched);
-    if (match.job) {
-      state.job = { company: match.job.company, role: match.job.role };
-    } else if (match.hint) {
-      state.matchHint = match.hint;
+  if (previous && !shouldRefetchJobMatch(previous, snapshot)) {
+    state.matched = previous.matched;
+    state.job = previous.job;
+    state.matchHint = previous.matchHint;
+    state.matchedAt = previous.matchedAt;
+  } else {
+    try {
+      const match = await apiFetch(`/api/jobs/match?url=${encodeURIComponent(snapshot.url)}`);
+      state.matched = Boolean(match.matched);
+      state.matchedAt = Date.now();
+      if (match.job) {
+        state.job = { company: match.job.company, role: match.job.role };
+      } else if (match.hint) {
+        state.matchHint = match.hint;
+      }
+    } catch (error) {
+      state.matchHint =
+        error instanceof Error
+          ? error.message
+          : "Could not look up JD match. Check extension token and API URL.";
     }
-  } catch (error) {
-    state.matchHint =
-      error instanceof Error
-        ? error.message
-        : "Could not look up JD match. Check extension token and API URL.";
   }
 
   if (!state.matched && state.fields.length > 0) {

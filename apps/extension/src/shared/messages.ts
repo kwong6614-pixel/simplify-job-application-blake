@@ -32,6 +32,7 @@ export interface FormSnapshot {
 
 export interface TabState extends FormSnapshot {
   matched: boolean;
+  matchedAt?: number;
   matchHint?: string;
   job?: {
     company: string;

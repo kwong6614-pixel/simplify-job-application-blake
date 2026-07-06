@@ -9,6 +9,7 @@ import {
   normalizeSheetUrl,
   scoreUrlMatch,
 } from "@/lib/sheets/url-match";
+import { getCachedMatch, invalidateUserMatchCache, setCachedMatch } from "@/lib/sheets/match-cache";
 
 const UPSERT_BATCH_SIZE = 25;
 
@@ -218,6 +219,7 @@ export async function syncSheetJobsFromRows(
 
   const synced = await upsertPreparedJobs(preparedJobs);
   await recordSheetSyncForUser(userId);
+  invalidateUserMatchCache(userId);
   return { synced, tabs };
 }
 
@@ -243,80 +245,77 @@ export async function syncSheetJobsForUser(userId: string): Promise<{
 export async function matchJobByUrl(userId: string, url: string) {
   const normalized = normalizeUrl(normalizeSheetUrl(url));
 
+  const cached = getCachedMatch(userId, normalized);
+  if (cached !== undefined) {
+    return cached;
+  }
+
   const mapping = await prisma.urlMapping.findUnique({
     where: { userId_appUrlNormalized: { userId, appUrlNormalized: normalized } },
+    select: { sheetJobId: true },
   });
 
   if (mapping) {
-    return prisma.sheetJob.findFirst({
+    const job = await prisma.sheetJob.findFirst({
       where: { userId, id: mapping.sheetJobId },
     });
+    setCachedMatch(userId, normalized, job);
+    return job;
   }
 
   const exact = await prisma.sheetJob.findFirst({
     where: { userId, urlNormalized: normalized },
   });
-  if (exact) return exact;
+  if (exact) {
+    setCachedMatch(userId, normalized, exact);
+    return exact;
+  }
+
+  const hints = getUrlSearchHints(url).sort((a, b) => b.length - a.length);
+  const primaryHint = hints[0];
+
+  if (primaryHint) {
+    const candidates = await prisma.sheetJob.findMany({
+      where: {
+        userId,
+        url: { contains: primaryHint, mode: "insensitive" },
+      },
+      orderBy: { syncedAt: "desc" },
+      take: 8,
+    });
+
+    let bestJob: (typeof candidates)[number] | null = null;
+    let bestScore = 0;
+    for (const job of candidates) {
+      const score = scoreUrlMatch(job.url, url);
+      if (score > bestScore) {
+        bestScore = score;
+        bestJob = job;
+      }
+    }
+
+    if (bestJob && bestScore >= MIN_MATCH_SCORE) {
+      setCachedMatch(userId, normalized, bestJob);
+      return bestJob;
+    }
+  }
 
   const ashbyUuid = extractAshbyJobUuid(url);
-  if (ashbyUuid) {
-    const ashbyCandidates = await prisma.sheetJob.findMany({
+  if (ashbyUuid && ashbyUuid !== primaryHint) {
+    const ashbyJob = await prisma.sheetJob.findFirst({
       where: {
         userId,
         url: { contains: ashbyUuid, mode: "insensitive" },
       },
       orderBy: { syncedAt: "desc" },
-      take: 20,
     });
-
-    let bestAshby: (typeof ashbyCandidates)[number] | null = null;
-    let bestAshbyScore = 0;
-    for (const job of ashbyCandidates) {
-      const score = scoreUrlMatch(job.url, url);
-      if (score > bestAshbyScore) {
-        bestAshbyScore = score;
-        bestAshby = job;
-      }
-    }
-    if (bestAshby && bestAshbyScore >= MIN_MATCH_SCORE) {
-      return bestAshby;
+    if (ashbyJob && scoreUrlMatch(ashbyJob.url, url) >= MIN_MATCH_SCORE) {
+      setCachedMatch(userId, normalized, ashbyJob);
+      return ashbyJob;
     }
   }
 
-  const hints = getUrlSearchHints(url);
-  const candidateJobs =
-    hints.length > 0
-      ? await prisma.sheetJob.findMany({
-          where: {
-            userId,
-            OR: hints.map((hint) => ({
-              url: { contains: hint, mode: "insensitive" as const },
-            })),
-          },
-          orderBy: { syncedAt: "desc" },
-          take: 100,
-        })
-      : await prisma.sheetJob.findMany({
-          where: { userId },
-          orderBy: { syncedAt: "desc" },
-          take: 500,
-        });
-
-  let bestJob: (typeof candidateJobs)[number] | null = null;
-  let bestScore = 0;
-
-  for (const job of candidateJobs) {
-    const score = scoreUrlMatch(job.url, url);
-    if (score > bestScore) {
-      bestScore = score;
-      bestJob = job;
-    }
-  }
-
-  if (bestScore >= MIN_MATCH_SCORE) {
-    return bestJob;
-  }
-
+  setCachedMatch(userId, normalized, null);
   return null;
 }
 
@@ -331,4 +330,11 @@ export async function rememberApplicationUrl(
     create: { userId, sheetJobId, applicationUrl, appUrlNormalized },
     update: { sheetJobId, applicationUrl },
   });
+
+  const job = await prisma.sheetJob.findFirst({
+    where: { userId, id: sheetJobId },
+  });
+  if (job) {
+    setCachedMatch(userId, appUrlNormalized, job);
+  }
 }

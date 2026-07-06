@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/db";
 import { hashToken } from "@/lib/crypto";
 
+const TOKEN_TOUCH_INTERVAL_MS = 60 * 1000;
+
 export async function getUserFromExtensionToken(
   authorizationHeader: string | null,
 ) {
@@ -21,7 +23,7 @@ export async function getUserFromExtensionToken(
             include: {
               workExperiences: { orderBy: { sortOrder: "asc" } },
               educations: { orderBy: { sortOrder: "asc" } },
-              skills: true,
+              skills: { orderBy: { name: "asc" } },
             },
           },
         },
@@ -33,10 +35,16 @@ export async function getUserFromExtensionToken(
     return null;
   }
 
-  await prisma.extensionToken.update({
-    where: { id: record.id },
-    data: { lastUsedAt: new Date() },
-  });
+  const shouldTouch =
+    !record.lastUsedAt ||
+    Date.now() - record.lastUsedAt.getTime() > TOKEN_TOUCH_INTERVAL_MS;
+
+  if (shouldTouch) {
+    void prisma.extensionToken.update({
+      where: { id: record.id },
+      data: { lastUsedAt: new Date() },
+    });
+  }
 
   return record.user;
 }

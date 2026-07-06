@@ -30,7 +30,8 @@ function fingerprintFields(fields: FormField[]): string {
       id: field.id,
       label: field.label,
       type: field.type,
-      value: field.currentValue ?? "",
+      required: field.required,
+      optionCount: field.options?.length ?? 0,
     })),
   );
 }
@@ -59,7 +60,7 @@ function schedulePublish() {
       }
       console.error("[jobapply] Failed to publish snapshot", error);
     });
-  }, 800);
+  }, 1200);
 }
 
 function shouldRetryEmptyFields(fields: FormField[], atsPlatform: string): boolean {

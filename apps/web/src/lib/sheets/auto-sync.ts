@@ -6,6 +6,7 @@ import {
   getAuthorizedSheetsClient,
   syncSheetJobsFromRows,
 } from "@/lib/sheets/google";
+import { invalidateUserMatchCache } from "@/lib/sheets/match-cache";
 
 export type AutoSyncResult = {
   ran: boolean;
@@ -17,6 +18,8 @@ export type AutoSyncResult = {
 };
 
 const inFlightByKey = new Map<string, Promise<AutoSyncResult>>();
+/** Skip Google Sheets fetch when synced recently (extension polls often). */
+const SYNC_COOLDOWN_MS = 3 * 60 * 1000;
 
 function computeSheetFingerprint(
   rowsByTab: Record<string, string[][]>,
@@ -64,9 +67,32 @@ async function userNeedsSync(
 }
 
 async function runAutoSync(userId: string, force: boolean): Promise<AutoSyncResult> {
-  const config = getGoogleSheetEnvConfig();
   const autoSyncTabNames = getAutoSyncSheetTabNames();
   const { sheets, spreadsheetId } = await getAuthorizedSheetsClient();
+
+  if (!force) {
+    const [jobCount, profile] = await Promise.all([
+      prisma.sheetJob.count({ where: { userId } }),
+      prisma.profile.findUnique({
+        where: { userId },
+        select: { lastSheetSyncAt: true },
+      }),
+    ]);
+
+    if (
+      jobCount > 0 &&
+      profile?.lastSheetSyncAt &&
+      Date.now() - profile.lastSheetSyncAt.getTime() < SYNC_COOLDOWN_MS
+    ) {
+      return {
+        ran: false,
+        skipped: true,
+        reason: "up_to_date",
+        lastSheetSyncAt: profile.lastSheetSyncAt.toISOString(),
+      };
+    }
+  }
+
   const rowsByTab = await fetchSheetRowsByTab(sheets, spreadsheetId, autoSyncTabNames);
   const fingerprint = computeSheetFingerprint(rowsByTab, autoSyncTabNames);
 
@@ -81,6 +107,7 @@ async function runAutoSync(userId: string, force: boolean): Promise<AutoSyncResu
   }
 
   const result = await syncSheetJobsFromRows(userId, rowsByTab, autoSyncTabNames);
+  invalidateUserMatchCache(userId);
 
   await prisma.googleSheetSyncMeta.upsert({
     where: { spreadsheetId },
