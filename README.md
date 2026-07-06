@@ -79,7 +79,7 @@ Chrome extension
 
 Next.js API
   └─ /api/jobs/match      → sheet row by URL
-  └─ /api/fill/generate   → rule fill + OpenAI for remaining fields
+  └─ /api/fill/generate   → single OpenAI request for all detected fields
   └─ /api/jobs/sync       → Google Sheet OAuth sync
   └─ /api/extension/token → extension auth
 

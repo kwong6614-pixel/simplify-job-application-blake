@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { getUserFromExtensionToken } from "@/lib/auth/extension";
-import { applyRuleBasedFill } from "@/lib/fill/rules";
 import { generateAiFillValues } from "@/lib/fill/openai";
 import { ensureSheetSyncedForUser } from "@/lib/sheets/auto-sync";
 import { matchJobByUrl } from "@/lib/sheets/google";
@@ -37,21 +36,14 @@ export async function POST(request: Request) {
   }
 
   const job = await matchJobByUrl(user.id, parsed.data.url);
-  const { values: ruleValues, remaining } = applyRuleBasedFill(
-    user.email,
-    user.profile,
-    parsed.data.fields,
-  );
-
-  const aiValues = await generateAiFillValues(
+  const values = await generateAiFillValues(
     apiKey,
     user.email,
     user.profile,
     job,
-    remaining,
+    parsed.data.fields,
   );
 
-  const values = { ...ruleValues, ...aiValues };
   const unmatchedFieldIds = parsed.data.fields
     .filter((field) => !values[field.id]?.trim())
     .map((field) => field.id);

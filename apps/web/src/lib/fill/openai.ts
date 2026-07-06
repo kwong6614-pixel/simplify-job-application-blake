@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import type { FormField } from "@app/shared";
 import type { SheetJob } from "@prisma/client";
 import { getOpenAiModel, chatTemperatureOption } from "@/lib/openai-config";
+import { resolveSelectAnswer } from "@/lib/fill/select-match";
 import { getApplicationFillPrompt } from "@/lib/prompts";
 import { profileToUserProfile } from "@/lib/fill/rules";
 import type { Profile, WorkExperience, Education, Skill } from "@prisma/client";
@@ -11,6 +12,25 @@ type ProfileWithRelations = Profile & {
   educations: Education[];
   skills: Skill[];
 };
+
+function normalizeAiValues(
+  fields: FormField[],
+  raw: Record<string, string>,
+): Record<string, string> {
+  const values: Record<string, string> = {};
+
+  for (const field of fields) {
+    const answer = raw[field.id]?.trim();
+    if (!answer) continue;
+
+    values[field.id] =
+      field.type === "select" || field.type === "combobox"
+        ? resolveSelectAnswer(field, answer)
+        : answer;
+  }
+
+  return values;
+}
 
 export async function generateAiFillValues(
   apiKey: string,
@@ -54,7 +74,15 @@ export async function generateAiFillValues(
       { role: "system", content: systemPrompt },
       {
         role: "user",
-        content: `Fill the following form fields. Return JSON with shape { "values": { "<fieldId>": "<answer>" } }.\n\n${JSON.stringify(userPayload)}`,
+        content: [
+          "Fill every form field below in one response.",
+          "Use the profile for standard application fields (name, contact, address, work authorization, EEO, links, salary, etc.).",
+          "Use the job description for role-specific or company-specific questions.",
+          "For select/combobox fields, prefer an exact option label or value from the provided options list.",
+          'Return JSON only: { "values": { "<fieldId>": "<answer>" } }',
+          "",
+          JSON.stringify(userPayload),
+        ].join("\n"),
       },
     ],
   });
@@ -64,7 +92,7 @@ export async function generateAiFillValues(
 
   try {
     const parsed = JSON.parse(content) as { values?: Record<string, string> };
-    return parsed.values ?? {};
+    return normalizeAiValues(fields, parsed.values ?? {});
   } catch {
     return {};
   }
