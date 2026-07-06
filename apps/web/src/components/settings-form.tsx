@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 export default function SettingsForm() {
-  const [openaiApiKey, setOpenaiApiKey] = useState("");
+  const [openaiConfigured, setOpenaiConfigured] = useState(false);
   const [sheetConfigured, setSheetConfigured] = useState(false);
   const [spreadsheetId, setSpreadsheetId] = useState<string | null>(null);
   const [sheetTabNames, setSheetTabNames] = useState<string[]>([]);
@@ -14,24 +14,13 @@ export default function SettingsForm() {
     fetch("/api/settings")
       .then((res) => res.json())
       .then((data) => {
+        setOpenaiConfigured(Boolean(data.openaiConfigured));
         setSheetConfigured(Boolean(data.sheetConfigured));
         setSpreadsheetId(data.spreadsheetId ?? null);
         setSheetTabNames(Array.isArray(data.sheetTabNames) ? data.sheetTabNames : []);
       })
       .catch(() => undefined);
   }, []);
-
-  async function saveSettings() {
-    setLoading(true);
-    setStatus(null);
-    const response = await fetch("/api/settings", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ openaiApiKey }),
-    });
-    setLoading(false);
-    setStatus(response.ok ? "Saved OpenAI key." : "Failed to save settings.");
-  }
 
   async function syncSheet() {
     setLoading(true);
@@ -48,22 +37,15 @@ export default function SettingsForm() {
 
   return (
     <section className="mt-8 space-y-4 rounded-xl border bg-white p-6">
-      <h2 className="font-medium">OpenAI (server-side only)</h2>
-      <input
-        type="password"
-        value={openaiApiKey}
-        onChange={(event) => setOpenaiApiKey(event.target.value)}
-        placeholder="sk-..."
-        className="w-full rounded-md border border-slate-300 px-3 py-2"
-      />
-      <button
-        type="button"
-        onClick={saveSettings}
-        disabled={loading}
-        className="rounded-lg bg-indigo-600 px-4 py-2 text-white hover:bg-indigo-500"
-      >
-        Save OpenAI key
-      </button>
+      <h2 className="font-medium">OpenAI (from environment)</h2>
+      <p className="text-sm text-slate-600">
+        Set <code className="rounded bg-slate-100 px-1">OPENAI_API_KEY</code> in{" "}
+        <code className="rounded bg-slate-100 px-1">.env.local</code> or Vercel env vars. Used
+        server-side for resume parsing and AI field fill.
+      </p>
+      <p className="text-sm text-slate-700">
+        Status: {openaiConfigured ? "configured" : "missing OPENAI_API_KEY"}
+      </p>
 
       <h2 className="pt-4 font-medium">Google Sheet (from environment)</h2>
       <p className="text-sm text-slate-600">

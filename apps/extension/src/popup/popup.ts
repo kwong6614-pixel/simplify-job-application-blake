@@ -46,7 +46,7 @@ function renderState(state: TabState | null) {
 
   jobMatch.textContent = state.matched
     ? `Matched: ${state.job?.company ?? "Unknown company"} — ${state.job?.role ?? "Role"}`
-    : "No JD match for this URL yet.";
+    : state.matchHint ?? "No JD match for this URL yet.";
 
   const selectCount = state.fields.filter(
     (field) => field.type === "select" || field.type === "combobox",

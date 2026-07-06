@@ -27,6 +27,7 @@ export interface TabState {
   url: string;
   title: string;
   matched: boolean;
+  matchHint?: string;
   job?: {
     company: string;
     role: string;

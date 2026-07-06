@@ -2,6 +2,7 @@ import { normalizeUrl } from "@/lib/crypto";
 
 const STRONG_SIGNATURE_PREFIXES = [
   "greenhouse:job:",
+  "greenhouse:",
   "lever:job:",
   "ashby:job:",
   "workday:job:",
@@ -18,6 +19,35 @@ export function normalizeSheetUrl(url: string): string {
     return `https://${trimmed}`;
   }
   return trimmed;
+}
+
+function addGreenhouseSignatures(
+  parsed: URL,
+  path: string,
+  signatures: Set<string>,
+): void {
+  const ghPathId = path.match(/\/jobs\/(\d+)/)?.[1];
+  const ghQueryId = parsed.searchParams.get("gh_jid");
+  const ghEmbedId = parsed.searchParams.get("token")
+    ? parsed.searchParams.get("for")
+    : null;
+  const greenhouseId = ghPathId || ghQueryId || ghEmbedId;
+
+  if (greenhouseId && /^\d+$/.test(greenhouseId)) {
+    signatures.add(`greenhouse:job:${greenhouseId}`);
+  }
+
+  const host = parsed.hostname.replace(/^www\./i, "").toLowerCase();
+  const hosted = host.match(/^([^.]+)\.greenhouse\.io$/);
+  if (hosted && greenhouseId && /^\d+$/.test(greenhouseId)) {
+    signatures.add(`greenhouse:${hosted[1].toLowerCase()}:${greenhouseId}`);
+  }
+
+  const boards = path.match(/^\/([^/]+)\/jobs\/(\d+)/);
+  if (boards) {
+    signatures.add(`greenhouse:${boards[1].toLowerCase()}:${boards[2]}`);
+    signatures.add(`greenhouse:job:${boards[2]}`);
+  }
 }
 
 export function getUrlMatchSignatures(url: string): Set<string> {
@@ -37,11 +67,13 @@ export function getUrlMatchSignatures(url: string): Set<string> {
 
     signatures.add(`${host}${path}`);
 
-    const ghPathId = path.match(/\/jobs\/(\d+)/)?.[1];
-    const ghQueryId = parsed.searchParams.get("gh_jid");
-    const greenhouseId = ghPathId || ghQueryId;
-    if (greenhouseId) {
-      signatures.add(`greenhouse:job:${greenhouseId}`);
+    if (host.includes("greenhouse.io")) {
+      addGreenhouseSignatures(parsed, path, signatures);
+    } else {
+      const ghQueryId = parsed.searchParams.get("gh_jid");
+      if (ghQueryId && /^\d+$/.test(ghQueryId)) {
+        signatures.add(`greenhouse:job:${ghQueryId}`);
+      }
     }
 
     const leverId = path.match(
@@ -77,7 +109,7 @@ export function getUrlMatchSignatures(url: string): Set<string> {
     const pathSegments = path.split("/").filter(Boolean);
     const lastSegment = pathSegments[pathSegments.length - 1];
     if (lastSegment) {
-      if (/^\d{5,}$/.test(lastSegment)) {
+      if (/^\d{4,}$/.test(lastSegment)) {
         signatures.add(`numeric-job:${lastSegment}`);
       } else if (/^[0-9a-f-]{20,}$/i.test(lastSegment)) {
         signatures.add(`path-job:${lastSegment.toLowerCase()}`);
@@ -126,11 +158,22 @@ export function getUrlSearchHints(url: string): string[] {
 
   try {
     const parsed = new URL(normalizeSheetUrl(url));
-    hints.add(parsed.hostname.replace(/^www\./i, ""));
+    const host = parsed.hostname.replace(/^www\./i, "");
+    hints.add(host);
+
+    if (host.includes("greenhouse.io")) {
+      hints.add("greenhouse.io");
+    }
 
     const ghId =
       parsed.pathname.match(/\/jobs\/(\d+)/)?.[1] || parsed.searchParams.get("gh_jid");
     if (ghId) hints.add(ghId);
+
+    const boards = parsed.pathname.match(/^\/([^/]+)\/jobs\/(\d+)/);
+    if (boards) {
+      hints.add(boards[1]);
+      hints.add(boards[2]);
+    }
 
     const leverId = parsed.pathname.match(
       /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i,
@@ -141,12 +184,12 @@ export function getUrlSearchHints(url: string): string[] {
     if (ashbyId) hints.add(ashbyId);
 
     const lastSegment = parsed.pathname.split("/").filter(Boolean).pop();
-    if (lastSegment && (/^\d{5,}$/.test(lastSegment) || lastSegment.length >= 20)) {
+    if (lastSegment && (/^\d{4,}$/.test(lastSegment) || lastSegment.length >= 20)) {
       hints.add(lastSegment);
     }
   } catch {
     hints.add(url.trim());
   }
 
-  return [...hints].filter((hint) => hint.length >= 4);
+  return [...hints].filter((hint) => hint.length >= 3);
 }

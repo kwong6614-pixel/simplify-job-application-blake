@@ -31,9 +31,13 @@ async function publishSnapshot() {
           company: match.job.company,
           role: match.job.role,
         };
+      } else if (match.hint) {
+        snapshot.matchHint = match.hint;
       }
-    } catch {
+    } catch (error) {
       snapshot.matched = false;
+      snapshot.matchHint =
+        error instanceof Error ? error.message : "Could not look up JD match. Check extension token and API URL.";
     }
 
     await chrome.runtime.sendMessage({

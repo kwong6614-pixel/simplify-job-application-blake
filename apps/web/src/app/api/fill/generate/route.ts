@@ -17,10 +17,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
 
-  const apiKey = user.profile.openaiApiKeyEnc ?? process.env.OPENAI_API_KEY;
+  const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
-      { error: "OpenAI API key is not configured in settings" },
+      { error: "OpenAI API key is not configured. Set OPENAI_API_KEY in environment variables." },
       { status: 400 },
     );
   }
