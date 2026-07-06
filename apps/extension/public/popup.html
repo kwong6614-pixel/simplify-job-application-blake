@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>JobApply</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="container">
+      <h1>JobApply</h1>
+      <section class="settings">
+        <label>
+          API base URL
+          <input id="apiBaseUrl" type="url" value="http://localhost:3000" />
+        </label>
+        <label>
+          Extension token
+          <input id="extensionToken" type="password" placeholder="Paste token from web app" />
+        </label>
+        <button id="saveSettings" type="button">Save connection</button>
+      </section>
+
+      <section id="status" class="status">
+        <p id="jobMatch">Checking tab...</p>
+        <p id="fieldCount"></p>
+      </section>
+
+      <button id="fillButton" type="button" disabled>Fill this tab</button>
+      <p id="message" class="message"></p>
+    </main>
+    <script type="module" src="/popup.js"></script>
+  </body>
+</html>

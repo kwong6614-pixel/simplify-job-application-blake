@@ -1,0 +1,199 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String
+  emailVerified DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  profile            Profile?
+  accounts           Account[]
+  sessions           Session[]
+  extensionTokens    ExtensionToken[]
+  googleSheetAccount GoogleSheetAccount?
+  urlMappings        UrlMapping[]
+}
+
+model Profile {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  firstName            String
+  lastName             String
+  middleName           String?
+  preferredName        String?
+  pronouns             String?
+  phone                String
+  addressLine1         String
+  addressLine2         String?
+  city                 String
+  state                String
+  zip                  String
+  country              String   @default("US")
+  birthYear            Int
+  usWorkAuthorization  String
+  requiresSponsorship  Boolean
+  gender               String
+  ethnicity            String
+  veteranStatus        String
+  disabilityStatus     String
+  sexualOrientation    String
+  transgenderStatus    String
+  salaryExpectation    Int
+  salaryPeriod         String   @default("annual")
+  jobSource            String
+  linkedinUrl          String?
+  githubUrl            String?
+  portfolioUrl         String?
+  websiteUrl           String?
+  willingToRelocate    Boolean  @default(false)
+  remotePreference     String   @default("no_preference")
+  earliestStartDate    String?
+  yearsOfExperience    Int?
+  highestEducationLevel String?
+  resumeFileName       String?
+  resumeFileUrl        String?
+  resumeParsedAt       DateTime?
+  openaiApiKeyEnc      String?
+
+  workExperiences WorkExperience[]
+  educations      Education[]
+  skills          Skill[]
+}
+
+model WorkExperience {
+  id          String   @id @default(cuid())
+  profileId   String
+  profile     Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  company     String
+  title       String
+  location    String?
+  startDate   String
+  endDate     String?
+  isCurrent   Boolean  @default(false)
+  description String?
+  sortOrder   Int      @default(0)
+}
+
+model Education {
+  id           String  @id @default(cuid())
+  profileId    String
+  profile      Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  school       String
+  degree       String
+  fieldOfStudy String?
+  startDate    String?
+  endDate      String?
+  gpa          String?
+  sortOrder    Int     @default(0)
+}
+
+model Skill {
+  id        String  @id @default(cuid())
+  profileId String
+  profile   Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  name      String
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model ExtensionToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  label     String?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  lastUsedAt DateTime?
+}
+
+model GoogleSheetAccount {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken  String   @db.Text
+  refreshToken String   @db.Text
+  expiresAt    DateTime
+  spreadsheetId String?
+  sheetTabName  String  @default("For Resume")
+  lastSyncedAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model SheetJob {
+  id                      String   @id @default(cuid())
+  userId                  String
+  sheetRowHash            String
+  date                    String?
+  company                 String
+  role                    String
+  techStack               String?
+  url                     String
+  urlNormalized           String
+  responsibilities        String   @default("")
+  qualificationsRequired  String   @default("")
+  qualificationsPreferred String   @default("")
+  submittedBy             String?
+  syncedAt                DateTime @default(now())
+
+  @@unique([userId, sheetRowHash])
+  @@index([userId, urlNormalized])
+}
+
+model UrlMapping {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sheetJobId      String
+  applicationUrl  String
+  appUrlNormalized String
+  createdAt       DateTime @default(now())
+
+  @@unique([userId, appUrlNormalized])
+}

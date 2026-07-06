@@ -1,0 +1,19 @@
+{
+  "name": "simplify-job-application-blake",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace @app/web",
+    "build": "npm run build --workspace @app/web",
+    "db:generate": "npm run db:generate --workspace @app/web",
+    "db:migrate": "npm run db:migrate --workspace @app/web",
+    "db:push": "npm run db:push --workspace @app/web",
+    "extension:build": "npm run build --workspace @app/extension"
+  },
+  "dependencies": {
+    "pdf-parse": "^2.4.5"
+  }
+}

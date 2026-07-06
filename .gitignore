@@ -1,0 +1,15 @@
+node_modules
+.next
+dist
+build
+.env
+.env.local
+.env*.local
+*.pem
+.DS_Store
+*.crx
+*.zip
+.turbo
+coverage
+apps/web/prisma/dev.db
+uploads/
