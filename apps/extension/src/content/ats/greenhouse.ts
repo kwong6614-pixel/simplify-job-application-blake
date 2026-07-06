@@ -1,5 +1,5 @@
 import type { FormField } from "../../shared/messages";
-import { collectComboboxFieldsInRoot } from "./combobox";
+import { collectComboboxFieldsInRoot, resolveComboboxTrigger } from "./combobox";
 import type { AtsAdapter } from "./shared";
 import {
   collectControlsFromRoots,
@@ -33,7 +33,6 @@ const GREENHOUSE_COMBOBOX_SELECTORS = [
   'input[aria-haspopup="listbox"]',
   'button[aria-haspopup="listbox"]',
   ".select__container input",
-  ".select .select__control",
 ];
 
 function getGreenhouseLabel(fieldRoot: Element, control: HTMLElement): string {
@@ -114,6 +113,8 @@ export const greenhouseAdapter: AtsAdapter = {
   },
 
   resolveElement(id, label) {
-    return resolveElementByStrategies(document, id, label);
+    const fromShared = resolveElementByStrategies(document, id, label);
+    if (fromShared) return fromShared;
+    return resolveComboboxTrigger(document, id);
   },
 };

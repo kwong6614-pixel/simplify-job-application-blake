@@ -1,5 +1,5 @@
 import type { FormField } from "../../shared/messages";
-import { collectComboboxFieldsInRoot, isComboboxTrigger } from "./combobox";
+import { collectComboboxFieldsInRoot, isComboboxTrigger, resolveComboboxTrigger } from "./combobox";
 import type { AtsAdapter } from "./shared";
 import {
   dedupeFields,
@@ -12,14 +12,27 @@ import {
   toSelectFormField,
 } from "./shared";
 
-const FORM_SELECTORS = [
-  "form[data-testid='job-application-form']",
+const APPLICATION_ROOT_SELECTORS = [
+  "[data-testid='job-application-form']",
+  "[data-testid='application-form']",
+  "[class*='JobApplication']",
+  "[class*='ApplicationForm']",
+  "[class*='application-form']",
   "form[action*='ashbyhq.com']",
-  "form[action*='application']",
-  "form[class*='Application']",
-  "[data-testid='application-form'] form",
-  "[class*='ApplicationForm'] form",
-  "main form",
+  "form",
+  "main",
+];
+
+const FIELD_CONTAINER_SELECTORS = [
+  "[class*='FieldEntry']",
+  "[class*='field-entry']",
+  "[class*='QuestionContainer']",
+  "[class*='applicationQuestion']",
+  "[class*='FieldRow']",
+  "[class*='fieldRow']",
+  "fieldset",
+  "[class*='field']",
+  "[class*='Field']",
 ].join(", ");
 
 const SKIP_CONTAINERS = [
@@ -32,9 +45,11 @@ const SKIP_CONTAINERS = [
 
 const ASHBY_COMBOBOX_SELECTORS = [
   '[class*="Select"] [role="combobox"]',
+  '[class*="select"] [role="combobox"]',
   'input[aria-haspopup="listbox"]',
   'button[aria-haspopup="listbox"]',
   '[data-testid*="select"]',
+  '[role="combobox"]',
 ];
 
 export function isAshbyPage(document: Document, hostname: string, url: string): boolean {
@@ -42,8 +57,10 @@ export function isAshbyPage(document: Document, hostname: string, url: string): 
     return true;
   }
 
-  if (document.querySelector(FORM_SELECTORS)) {
-    return true;
+  for (const selector of APPLICATION_ROOT_SELECTORS) {
+    if (document.querySelector(selector)) {
+      return true;
+    }
   }
 
   if (document.querySelector('script[src*="ashbyhq.com"], a[href*="ashbyhq.com"]')) {
@@ -61,11 +78,13 @@ function getAshbyLabel(fieldRoot: Element, control: HTMLElement): string {
   const labelEl =
     fieldRoot.querySelector("label") ??
     fieldRoot.querySelector("[class*='Label']") ??
-    fieldRoot.querySelector("p, span");
+    fieldRoot.querySelector("[class*='label']") ??
+    fieldRoot.querySelector("legend") ??
+    fieldRoot.querySelector("h3, h4, p, span");
 
   if (labelEl?.textContent?.trim()) {
     const text = labelEl.textContent.replace(/\s+/g, " ").trim();
-    if (text.length <= 120) return text;
+    if (text.length >= 2 && text.length <= 120) return text;
   }
 
   return resolveControlLabel(
@@ -93,14 +112,26 @@ function collectControl(
   fields.push(toFormField(input, getAshbyLabel(fieldRoot, input), fields.length));
 }
 
-function findApplicationRoot(document: Document): Element | null {
-  return (
-    document.querySelector(FORM_SELECTORS) ??
-    document.querySelector("form") ??
-    document.querySelector("[data-testid='job-application-form']") ??
-    document.querySelector("[class*='ApplicationForm']") ??
-    document.querySelector("main")
-  );
+function findApplicationRoot(document: Document): Element {
+  for (const selector of APPLICATION_ROOT_SELECTORS) {
+    const element = document.querySelector(selector);
+    if (element) return element;
+  }
+
+  return document.body;
+}
+
+function collectFromContainers(root: Element, fields: FormField[]): void {
+  const containers = Array.from(root.querySelectorAll(FIELD_CONTAINER_SELECTORS));
+
+  for (const container of containers) {
+    if (container.closest(SKIP_CONTAINERS)) continue;
+
+    const control = container.querySelector("input, textarea, select, [role='combobox']");
+    if (!control) continue;
+
+    collectControl(fields, container, control as HTMLElement);
+  }
 }
 
 export const ashbyAdapter: AtsAdapter = {
@@ -111,39 +142,26 @@ export const ashbyAdapter: AtsAdapter = {
   },
 
   async collectFields(document) {
-    const form = findApplicationRoot(document);
-    if (!form) return [];
-
+    const root = findApplicationRoot(document);
     const fields: FormField[] = [];
-    const candidates = Array.from(form.querySelectorAll("input, textarea, select"));
 
+    collectFromContainers(root, fields);
+
+    const candidates = Array.from(root.querySelectorAll("input, textarea, select, [role='combobox']"));
     for (const control of candidates) {
       if (control.closest(SKIP_CONTAINERS)) continue;
 
       const fieldRoot =
-        control.closest("[class*='field'], [class*='Field'], [class*='question'], label") ??
+        control.closest(FIELD_CONTAINER_SELECTORS) ??
         control.parentElement ??
         control;
 
       collectControl(fields, fieldRoot, control as HTMLElement);
     }
 
-    const groupedFields = Array.from(
-      form.querySelectorAll(
-        "[class*='FieldEntry'], [class*='field-entry'], [class*='Question'], [class*='question']",
-      ),
-    );
-
-    for (const group of groupedFields) {
-      if (group.querySelector(SKIP_CONTAINERS)) continue;
-      const control = group.querySelector("input, textarea, select");
-      if (!control) continue;
-      collectControl(fields, group, control as HTMLElement);
-    }
-
     const comboboxes = await collectComboboxFieldsInRoot(
       document,
-      form,
+      root,
       "ashby",
       getAshbyLabel,
       ASHBY_COMBOBOX_SELECTORS,
@@ -153,6 +171,12 @@ export const ashbyAdapter: AtsAdapter = {
   },
 
   resolveElement(id, label) {
-    return resolveElementByStrategies(document, id, label);
+    const fromShared = resolveElementByStrategies(document, id, label);
+    if (fromShared) return fromShared;
+
+    const combobox = resolveComboboxTrigger(document, id);
+    if (combobox) return combobox;
+
+    return null;
   },
 };

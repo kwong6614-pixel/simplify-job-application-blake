@@ -17,8 +17,21 @@ import { hideFillLoading, showFillLoading, updateFillLoading } from "./fill-load
 let publishTimer: number | undefined;
 let fillInProgress = false;
 let contentScriptStopped = false;
+let lastSnapshotFingerprint = "";
+let publishInProgress = false;
 
 const observer = new MutationObserver(schedulePublish);
+
+function fingerprintFields(fields: FormField[]): string {
+  return JSON.stringify(
+    fields.map((field) => ({
+      id: field.id,
+      label: field.label,
+      type: field.type,
+      value: field.currentValue ?? "",
+    })),
+  );
+}
 
 function stopContentScript(): void {
   if (contentScriptStopped) return;
@@ -31,7 +44,7 @@ function stopContentScript(): void {
 }
 
 function schedulePublish() {
-  if (contentScriptStopped || fillInProgress || !shouldActivateContentScript()) {
+  if (contentScriptStopped || fillInProgress || publishInProgress || !shouldActivateContentScript()) {
     return;
   }
 
@@ -48,26 +61,46 @@ function schedulePublish() {
 }
 
 async function publishSnapshot() {
-  if (contentScriptStopped || fillInProgress || !shouldActivateContentScript()) {
+  if (contentScriptStopped || fillInProgress || publishInProgress || !shouldActivateContentScript()) {
     return;
   }
 
-  clearComboboxRegistry();
-  const fields = await collectFields();
+  publishInProgress = true;
+  observer.disconnect();
 
-  const snapshot: FormSnapshot = {
-    url: window.location.href,
-    title: document.title,
-    fields,
-    atsPlatform: getAtsPlatform(),
-  };
+  try {
+    clearComboboxRegistry();
+    const fields = await collectFields();
+    const fingerprint = fingerprintFields(fields);
 
-  const sent = await safeSendRuntimeMessage({
-    type: "TAB_FORM_SNAPSHOT",
-    snapshot,
-  });
-  if (!sent) {
-    stopContentScript();
+    if (fingerprint === lastSnapshotFingerprint) {
+      return;
+    }
+
+    lastSnapshotFingerprint = fingerprint;
+
+    const snapshot: FormSnapshot = {
+      url: window.location.href,
+      title: document.title,
+      fields,
+      atsPlatform: getAtsPlatform(),
+    };
+
+    const sent = await safeSendRuntimeMessage({
+      type: "TAB_FORM_SNAPSHOT",
+      snapshot,
+    });
+    if (!sent) {
+      stopContentScript();
+    }
+  } finally {
+    publishInProgress = false;
+    if (!contentScriptStopped) {
+      observer.observe(document.documentElement, {
+        childList: true,
+        subtree: true,
+      });
+    }
   }
 }
 
@@ -117,6 +150,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         fillInProgress = false;
         setReadyPanelFilling(false);
         hideFillLoading();
+        lastSnapshotFingerprint = "";
         schedulePublish();
       });
     return true;
@@ -135,6 +169,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 
   if (message.type === "REFRESH_SNAPSHOT") {
+    lastSnapshotFingerprint = "";
     void publishSnapshot()
       .then(() => sendResponse({ ok: true }))
       .catch((error) => {

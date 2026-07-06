@@ -1,6 +1,7 @@
 import type { FormField, FormFieldOption } from "../../shared/messages";
 import { registerCombobox } from "./combobox-registry";
 import type { ComboboxPlatform } from "./combobox-registry";
+import { getSelectOptions } from "./shared";
 
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
@@ -189,6 +190,9 @@ export async function readComboboxOptions(
   document: Document,
   trigger: HTMLElement,
 ): Promise<FormFieldOption[]> {
+  const passive = readPassiveComboboxOptions(document, trigger);
+  if (passive.length > 0) return passive;
+
   await openCombobox(trigger);
   await sleep(200);
 
@@ -202,6 +206,44 @@ export async function readComboboxOptions(
   await closeCombobox(document);
   await sleep(120);
   return options;
+}
+
+/** Read dropdown options without opening the menu — safe for passive form scans. */
+export function readPassiveComboboxOptions(
+  document: Document,
+  trigger: HTMLElement,
+): FormFieldOption[] {
+  const ariaControls = trigger.getAttribute("aria-controls");
+  if (ariaControls) {
+    const listbox = document.getElementById(ariaControls);
+    if (listbox) {
+      const options = scrapeListboxOptions(listbox);
+      if (options.length > 0) return options;
+    }
+  }
+
+  const fieldRoot = trigger.closest(
+    ".field, .select, .text, [class*='field'], [class*='Field'], [class*='Question']",
+  );
+  if (fieldRoot) {
+    const select = fieldRoot.querySelector("select");
+    if (select) {
+      return getSelectOptions(select);
+    }
+  }
+
+  const owns = trigger.getAttribute("aria-owns");
+  if (owns) {
+    for (const id of owns.split(/\s+/)) {
+      const owned = document.getElementById(id);
+      if (owned) {
+        const options = scrapeListboxOptions(owned);
+        if (options.length > 0) return options;
+      }
+    }
+  }
+
+  return [];
 }
 
 export async function applyComboboxValue(
@@ -357,7 +399,9 @@ export async function collectComboboxFieldsInRoot(
   platform: ComboboxPlatform,
   getLabel: (fieldRoot: Element, trigger: HTMLElement) => string,
   extraSelectors: string[] = [],
+  options?: { probeOptions?: boolean },
 ): Promise<FormField[]> {
+  const probeOptions = options?.probeOptions ?? false;
   const triggers = findComboboxTriggers(root, extraSelectors);
   const fields: FormField[] = [];
 
@@ -379,14 +423,16 @@ export async function collectComboboxFieldsInRoot(
 
     const label = getLabel(fieldRoot, trigger);
 
-    let options: FormFieldOption[] = [];
-    try {
-      options = await readComboboxOptions(document, trigger);
-    } catch {
-      options = [];
+    let comboboxOptions: FormFieldOption[] = readPassiveComboboxOptions(document, trigger);
+    if (probeOptions && comboboxOptions.length === 0) {
+      try {
+        comboboxOptions = await readComboboxOptions(document, trigger);
+      } catch {
+        comboboxOptions = [];
+      }
     }
 
-    fields.push(toComboboxFormField(trigger, label, fields.length, options, platform));
+    fields.push(toComboboxFormField(trigger, label, fields.length, comboboxOptions, platform));
   }
 
   return fields;

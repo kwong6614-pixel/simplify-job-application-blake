@@ -76,9 +76,15 @@ function addAshbySignatures(parsed: URL, path: string, signatures: Set<string>):
     signatures.add(`ashby:job:${ashbyQueryId}`);
   }
 
-  const ashbyPath = path.match(/^\/([^/]+)\/([0-9a-f-]{36})(?:\/|$)/i);
-  if (ashbyPath) {
-    signatures.add(`ashby:job:${ashbyPath[2].toLowerCase()}`);
+  const ashbyUuid =
+    path.match(/\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:\/|$)/i)?.[1];
+  if (ashbyUuid) {
+    signatures.add(`ashby:job:${ashbyUuid.toLowerCase()}`);
+  }
+
+  const companySlug = path.match(/^\/([^/]+)\/([0-9a-f-]{36})/i);
+  if (companySlug) {
+    signatures.add(`ashby:${companySlug[1].toLowerCase()}:${companySlug[2].toLowerCase()}`);
   }
 }
 
@@ -157,6 +163,13 @@ export function getUrlMatchSignatures(url: string): Set<string> {
 }
 
 function scoreSharedSignature(signature: string): number {
+  if (signature.startsWith("ashby:") && signature.split(":").length === 3) {
+    const middle = signature.split(":")[1];
+    if (middle !== "job") {
+      return 95;
+    }
+  }
+
   if (signature.startsWith("greenhouse:") && signature.split(":").length === 3) {
     const middle = signature.split(":")[1];
     if (middle !== "job" && middle !== "jr_id") {
@@ -236,8 +249,14 @@ export function getUrlSearchHints(url: string): string[] {
 
     const ashbyId =
       parsed.searchParams.get("ashby_jid") ||
-      path.match(/^\/([^/]+)\/([0-9a-f-]{36})(?:\/|$)/i)?.[2];
-    if (ashbyId) hints.add(ashbyId);
+      path.match(/\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:\/|$)/i)?.[1];
+    if (ashbyId) {
+      hints.add(ashbyId);
+      const ashbyCompany = path.match(/^\/([^/]+)\/[0-9a-f-]{36}/i)?.[1];
+      if (ashbyCompany) {
+        hints.add(`${ashbyCompany}/${ashbyId}`);
+      }
+    }
 
     const leverId = path.match(
       /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i,
