@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import type { ProfileUpdateInput } from "@/lib/validators";
 
 const inputClass = "mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm";
@@ -14,8 +14,15 @@ export type DashboardProfileInitial = ProfileUpdateInput & ResumeMeta;
 
 type DashboardProfileProps = {
   email: string;
+  openaiConfigured: boolean;
+  openaiModel: string;
   initialProfile: DashboardProfileInitial;
 };
+
+type ResumeFeedback = {
+  level: "success" | "warning" | "error";
+  message: string;
+} | null;
 
 const emptyWork = (): ProfileUpdateInput["workExperiences"][number] => ({
   company: "",
@@ -53,7 +60,13 @@ function Field({
   );
 }
 
-export default function DashboardProfile({ email, initialProfile }: DashboardProfileProps) {
+export default function DashboardProfile({
+  email,
+  openaiConfigured,
+  openaiModel,
+  initialProfile,
+}: DashboardProfileProps) {
+  const resumeInputRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState<ProfileUpdateInput>({
     firstName: initialProfile.firstName,
     lastName: initialProfile.lastName,
@@ -101,6 +114,8 @@ export default function DashboardProfile({ email, initialProfile }: DashboardPro
   const [skillsText, setSkillsText] = useState(initialProfile.skills.join(", "));
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [resumeFeedback, setResumeFeedback] = useState<ResumeFeedback>(null);
+  const [parsingStep, setParsingStep] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [parsing, setParsing] = useState(false);
 
@@ -195,77 +210,100 @@ export default function DashboardProfile({ email, initialProfile }: DashboardPro
   async function reparseResume(file: File) {
     setParsing(true);
     setError(null);
-    setStatus("Parsing resume PDF...");
+    setResumeFeedback(null);
+    setParsingStep("Reading PDF text...");
 
     const body = new FormData();
     body.append("resume", file);
 
-    const response = await fetch("/api/profile/resume", { method: "POST", body });
-    const data = await response.json();
-    setParsing(false);
+    try {
+      setParsingStep("Sending to server for AI extraction...");
+      const response = await fetch("/api/profile/resume", { method: "POST", body });
+      const data = await response.json();
 
-    if (!response.ok) {
-      setError(data.error ?? "Resume parsing failed");
-      setStatus(null);
-      return;
+      if (!response.ok) {
+        setResumeFeedback({
+          level: "error",
+          message: data.error ?? "Resume upload failed.",
+        });
+        return;
+      }
+
+      setResumeFileName(data.parsed.resumeFileName);
+      setResumeParsedAt(data.parsed.resumeParsedAt);
+
+      if (data.updated && data.profile) {
+        applyProfileFromServer(data.profile);
+      }
+
+      setResumeFeedback({
+        level: data.level === "warning" ? "warning" : "success",
+        message: data.message ?? "Resume processed.",
+      });
+    } catch {
+      setResumeFeedback({
+        level: "error",
+        message: "Network error while uploading. Check your connection and try again.",
+      });
+    } finally {
+      setParsing(false);
+      setParsingStep(null);
+      if (resumeInputRef.current) {
+        resumeInputRef.current.value = "";
+      }
     }
+  }
 
-    setResumeFileName(data.parsed.resumeFileName);
-    setResumeParsedAt(data.parsed.resumeParsedAt);
+  function applyProfileFromServer(profile: {
+    yearsOfExperience?: number | null;
+    highestEducationLevel?: string | null;
+    workExperiences?: Array<{
+      company: string;
+      title: string;
+      location?: string | null;
+      startDate: string;
+      endDate?: string | null;
+      isCurrent: boolean;
+      description?: string | null;
+    }>;
+    educations?: Array<{
+      school: string;
+      degree: string;
+      fieldOfStudy?: string | null;
+      startDate?: string | null;
+      endDate?: string | null;
+      gpa?: string | null;
+    }>;
+    skills?: Array<{ name: string }>;
+  }) {
+    const work = (profile.workExperiences ?? []).map((item) => ({
+      company: item.company,
+      title: item.title,
+      location: item.location ?? "",
+      startDate: item.startDate,
+      endDate: item.endDate ?? "",
+      isCurrent: item.isCurrent,
+      description: item.description ?? "",
+    }));
+    const edu = (profile.educations ?? []).map((item) => ({
+      school: item.school,
+      degree: item.degree,
+      fieldOfStudy: item.fieldOfStudy ?? "",
+      startDate: item.startDate ?? "",
+      endDate: item.endDate ?? "",
+      gpa: item.gpa ?? "",
+    }));
+    const skillNames = (profile.skills ?? []).map((s) => s.name);
 
-    if (data.profile) {
-      const work = (data.profile.workExperiences ?? []).map(
-        (item: {
-          company: string;
-          title: string;
-          location?: string | null;
-          startDate: string;
-          endDate?: string | null;
-          isCurrent: boolean;
-          description?: string | null;
-        }) => ({
-          company: item.company,
-          title: item.title,
-          location: item.location ?? "",
-          startDate: item.startDate,
-          endDate: item.endDate ?? "",
-          isCurrent: item.isCurrent,
-          description: item.description ?? "",
-        }),
-      );
-      const edu = (data.profile.educations ?? []).map(
-        (item: {
-          school: string;
-          degree: string;
-          fieldOfStudy?: string | null;
-          startDate?: string | null;
-          endDate?: string | null;
-          gpa?: string | null;
-        }) => ({
-          school: item.school,
-          degree: item.degree,
-          fieldOfStudy: item.fieldOfStudy ?? "",
-          startDate: item.startDate ?? "",
-          endDate: item.endDate ?? "",
-          gpa: item.gpa ?? "",
-        }),
-      );
-      const skillNames = (data.profile.skills ?? []).map((s: { name: string }) => s.name);
-
-      setForm((prev) => ({
-        ...prev,
-        yearsOfExperience: data.profile.yearsOfExperience ?? prev.yearsOfExperience,
-        highestEducationLevel: data.profile.highestEducationLevel ?? prev.highestEducationLevel,
-        workExperiences: work.length > 0 ? work : [emptyWork()],
-        educations: edu.length > 0 ? edu : [emptyEducation()],
-        skills: skillNames,
-      }));
-      setSkillsText(skillNames.join(", "));
-    }
-
-    setStatus(
-      `Parsed ${data.parsed.workExperiences} roles, ${data.parsed.educations} schools, ${data.parsed.skills} skills from PDF.`,
-    );
+    setForm((prev) => ({
+      ...prev,
+      yearsOfExperience: profile.yearsOfExperience ?? prev.yearsOfExperience,
+      highestEducationLevel: profile.highestEducationLevel ?? prev.highestEducationLevel,
+      workExperiences: work.length > 0 ? work : [emptyWork()],
+      educations: edu.length > 0 ? edu : [emptyEducation()],
+      skills: skillNames,
+    }));
+    setSkillsText(skillNames.join(", "));
   }
 
   const parseStatus = resumeParsedAt
@@ -277,20 +315,33 @@ export default function DashboardProfile({ email, initialProfile }: DashboardPro
       <section className="rounded-xl border bg-white p-6">
         <h2 className="font-medium">Resume PDF</h2>
         <p className="mt-2 text-sm text-slate-600">
-          At signup we extract text from your PDF and use AI to pull work history, education, and
-          skills. Re-upload to parse again.
+          Upload a text-based PDF resume. We extract work history, education, and skills with AI,
+          then show the results in the sections below.
         </p>
+
+        <div
+          className={`mt-4 rounded-md p-3 text-sm ${
+            openaiConfigured
+              ? "bg-green-50 text-green-900"
+              : "bg-amber-50 text-amber-900"
+          }`}
+        >
+          {openaiConfigured
+            ? `AI parsing is ready on the server (model: ${openaiModel}).`
+            : "AI parsing is off — add OPENAI_API_KEY to the server environment (.env.local locally, Vercel env vars in production), then restart or redeploy."}
+        </div>
+
         <dl className="mt-4 grid gap-2 text-sm sm:grid-cols-2">
           <div>
-            <dt className="text-slate-500">File</dt>
-            <dd className="font-medium">{resumeFileName ?? "None uploaded"}</dd>
+            <dt className="text-slate-500">Current file</dt>
+            <dd className="font-medium">{resumeFileName ?? "None uploaded yet"}</dd>
           </div>
           <div>
-            <dt className="text-slate-500">Parse status</dt>
+            <dt className="text-slate-500">Last parsed</dt>
             <dd className="font-medium">{parseStatus}</dd>
           </div>
           <div>
-            <dt className="text-slate-500">Extracted</dt>
+            <dt className="text-slate-500">In your profile now</dt>
             <dd className="font-medium">
               {form.workExperiences.filter((w) => w.company).length} roles,{" "}
               {form.educations.filter((e) => e.school).length} schools,{" "}
@@ -298,23 +349,53 @@ export default function DashboardProfile({ email, initialProfile }: DashboardPro
             </dd>
           </div>
           <div>
-            <dt className="text-slate-500">Account email</dt>
+            <dt className="text-slate-500">Account</dt>
             <dd className="font-medium">{email}</dd>
           </div>
         </dl>
+
+        {parsing && parsingStep ? (
+          <p className="mt-4 text-sm text-indigo-700">{parsingStep}</p>
+        ) : null}
+
+        {resumeFeedback ? (
+          <p
+            className={`mt-4 rounded-md p-3 text-sm ${
+              resumeFeedback.level === "success"
+                ? "bg-green-50 text-green-900"
+                : resumeFeedback.level === "warning"
+                  ? "bg-amber-50 text-amber-900"
+                  : "bg-red-50 text-red-900"
+            }`}
+          >
+            {resumeFeedback.message}
+          </p>
+        ) : null}
+
         <label className="mt-4 block text-sm">
-          Re-upload resume PDF
+          Upload resume PDF
           <input
+            ref={resumeInputRef}
             type="file"
             accept="application/pdf,.pdf"
-            disabled={parsing}
-            className={`${inputClass} file:mr-3 file:rounded-md file:border-0 file:bg-indigo-50 file:px-3 file:py-2 file:text-indigo-700`}
+            disabled={parsing || !openaiConfigured}
+            className={`${inputClass} file:mr-3 file:rounded-md file:border-0 file:bg-indigo-50 file:px-3 file:py-2 file:text-indigo-700 disabled:opacity-60`}
             onChange={(event) => {
               const file = event.target.files?.[0];
               if (file) void reparseResume(file);
             }}
           />
         </label>
+        {!openaiConfigured ? (
+          <p className="mt-2 text-xs text-slate-500">
+            Upload is disabled until OpenAI is configured on the server.
+          </p>
+        ) : (
+          <p className="mt-2 text-xs text-slate-500">
+            Tip: scanned/image PDFs often fail. Export from Word or Google Docs as PDF for best
+            results.
+          </p>
+        )}
       </section>
 
       <section className="rounded-xl border bg-white p-6">

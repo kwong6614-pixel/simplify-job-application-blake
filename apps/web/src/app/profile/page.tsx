@@ -6,6 +6,8 @@ import { ensureSheetSyncedForUser } from "@/lib/sheets/auto-sync";
 import { getAutoSyncSheetTabNames, isGoogleSheetEnvConfigured } from "@/lib/sheets/config";
 import DashboardSync from "@/components/dashboard-sync";
 import DashboardProfile, { type DashboardProfileInitial } from "@/components/dashboard-profile";
+import { getOpenAiModel } from "@/lib/openai-config";
+import { isOpenAiConfigured } from "@/lib/resume/parse";
 
 export default async function ProfilePage() {
   const session = await auth();
@@ -125,7 +127,12 @@ export default async function ProfilePage() {
         autoSyncMessage={autoSyncMessage}
       />
 
-      <DashboardProfile email={session.user.email ?? ""} initialProfile={initialProfile} />
+      <DashboardProfile
+        email={session.user.email ?? ""}
+        openaiConfigured={isOpenAiConfigured()}
+        openaiModel={getOpenAiModel()}
+        initialProfile={initialProfile}
+      />
     </main>
   );
 }

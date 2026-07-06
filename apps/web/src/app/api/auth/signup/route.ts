@@ -39,7 +39,8 @@ export async function POST(request: Request) {
 
     const pdfBuffer = Buffer.from(await resumeEntry.arrayBuffer());
     const resumeText = await extractPdfText(pdfBuffer);
-    const parsedResume = await parseResumeText(resumeText);
+    const parseResult = await parseResumeText(resumeText);
+    const parsedResume = parseResult.data;
 
     const workExperiences = data.workExperiences.length
       ? data.workExperiences
