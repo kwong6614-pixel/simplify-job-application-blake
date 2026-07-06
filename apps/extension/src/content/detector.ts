@@ -1,4 +1,4 @@
-import { type FormSnapshot } from "../shared/messages";
+import { type FormField, type FormSnapshot } from "../shared/messages";
 import {
   isExtensionContextInvalidated,
   isRuntimeAvailable,
@@ -9,7 +9,7 @@ import { applyFill, collectFields, getAtsPlatform } from "./filler";
 import { clearComboboxRegistry } from "./ats/combobox-registry";
 
 let publishTimer: number | undefined;
-let lastFields: Awaited<ReturnType<typeof collectFields>> = [];
+let fillInProgress = false;
 let contentScriptStopped = false;
 
 const observer = new MutationObserver(schedulePublish);
@@ -25,8 +25,7 @@ function stopContentScript(): void {
 }
 
 function schedulePublish() {
-  if (contentScriptStopped || !shouldActivateContentScript()) {
-    stopContentScript();
+  if (contentScriptStopped || fillInProgress || !shouldActivateContentScript()) {
     return;
   }
 
@@ -43,14 +42,12 @@ function schedulePublish() {
 }
 
 async function publishSnapshot() {
-  if (contentScriptStopped || !shouldActivateContentScript()) {
-    stopContentScript();
+  if (contentScriptStopped || fillInProgress || !shouldActivateContentScript()) {
     return;
   }
 
   clearComboboxRegistry();
   const fields = await collectFields();
-  lastFields = fields;
 
   const snapshot: FormSnapshot = {
     url: window.location.href,
@@ -75,12 +72,20 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 
   if (message.type === "APPLY_FILL") {
-    void applyFill(message.values as Record<string, string>, lastFields)
+    fillInProgress = true;
+    void applyFill(
+      message.values as Record<string, string>,
+      (message.fields as FormField[] | undefined) ?? [],
+    )
       .then(() => sendResponse({ ok: true }))
       .catch((error) => {
         sendResponse({
           error: error instanceof Error ? error.message : "Fill failed",
         });
+      })
+      .finally(() => {
+        fillInProgress = false;
+        schedulePublish();
       });
     return true;
   }

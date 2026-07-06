@@ -48,7 +48,7 @@ export type RuntimeMessage =
   | { type: "GET_TAB_STATE"; tabId?: number }
   | { type: "TAB_FORM_SNAPSHOT"; snapshot: FormSnapshot }
   | { type: "FILL_TAB"; tabId: number }
-  | { type: "APPLY_FILL"; values: Record<string, string> }
+  | { type: "APPLY_FILL"; values: Record<string, string>; fields: FormField[] }
   | { type: "REFRESH_SNAPSHOT" };
 
 import {

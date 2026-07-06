@@ -1,7 +1,8 @@
 import { apiFetch, isTabReady, type FormSnapshot, type TabState } from "../shared/messages";
 
+/** One entry per open tab — tabs never share or overwrite each other's state. */
 const tabStates = new Map<number, TabState>();
-const matchGeneration = new Map<number, number>();
+const fillsInFlight = new Set<number>();
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   void handleMessage(message, sender.tab?.id).then(sendResponse);
@@ -31,48 +32,32 @@ async function handleMessage(
 }
 
 async function enrichAndStoreTabState(tabId: number, snapshot: FormSnapshot) {
-  const generation = (matchGeneration.get(tabId) ?? 0) + 1;
-  matchGeneration.set(tabId, generation);
-
-  const state: TabState = {
-    ...snapshot,
-    matched: false,
-  };
+  const state: TabState = { ...snapshot, matched: false };
 
   try {
     const match = await apiFetch(`/api/jobs/match?url=${encodeURIComponent(snapshot.url)}`);
-    if (matchGeneration.get(tabId) !== generation) return;
-
     state.matched = Boolean(match.matched);
     if (match.job) {
-      state.job = {
-        company: match.job.company,
-        role: match.job.role,
-      };
+      state.job = { company: match.job.company, role: match.job.role };
     } else if (match.hint) {
       state.matchHint = match.hint;
     }
   } catch (error) {
-    if (matchGeneration.get(tabId) !== generation) return;
     state.matchHint =
       error instanceof Error
         ? error.message
         : "Could not look up JD match. Check extension token and API URL.";
   }
 
-  if (matchGeneration.get(tabId) !== generation) return;
-
   tabStates.set(tabId, state);
-  updateTabAction(tabId, state);
+  setTabEnabled(tabId, isTabReady(state));
 }
 
-function updateTabAction(tabId: number, state: TabState) {
-  void chrome.action.enable(tabId);
-  if (isTabReady(state)) {
-    void chrome.action.setBadgeBackgroundColor({ tabId, color: "#047857" });
-    void chrome.action.setBadgeText({ tabId, text: "ON" });
+function setTabEnabled(tabId: number, enabled: boolean) {
+  if (enabled) {
+    void chrome.action.enable(tabId);
   } else {
-    void chrome.action.setBadgeText({ tabId, text: "" });
+    void chrome.action.disable(tabId);
   }
 }
 
@@ -85,33 +70,32 @@ async function fillTab(tabId: number) {
     return { error: state.matchHint ?? "No JD match for this URL. Sync your sheet first." };
   }
 
-  const result = await apiFetch("/api/fill/generate", {
-    method: "POST",
-    body: JSON.stringify({
-      url: state.url,
+  if (fillsInFlight.has(tabId)) {
+    return { error: "Fill already in progress on this tab." };
+  }
+
+  fillsInFlight.add(tabId);
+  try {
+    const result = await apiFetch("/api/fill/generate", {
+      method: "POST",
+      body: JSON.stringify({ url: state.url, fields: state.fields }),
+    });
+
+    await chrome.tabs.sendMessage(tabId, {
+      type: "APPLY_FILL",
+      values: result.values,
       fields: state.fields,
-    }),
-  });
+    });
 
-  await chrome.tabs.sendMessage(tabId, {
-    type: "APPLY_FILL",
-    values: result.values,
-  });
-
-  return { ok: true, unmatchedFieldIds: result.unmatchedFieldIds ?? [] };
+    return { ok: true, unmatchedFieldIds: result.unmatchedFieldIds ?? [] };
+  } finally {
+    fillsInFlight.delete(tabId);
+  }
 }
 
 chrome.tabs.onRemoved.addListener((tabId) => {
   tabStates.delete(tabId);
-  matchGeneration.delete(tabId);
-});
-
-chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
-  if (changeInfo.url) {
-    tabStates.delete(tabId);
-    matchGeneration.delete(tabId);
-    void chrome.action.setBadgeText({ tabId, text: "" });
-  }
+  fillsInFlight.delete(tabId);
 });
 
 export {};

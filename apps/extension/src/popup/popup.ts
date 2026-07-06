@@ -46,22 +46,23 @@ async function loadSettings() {
   renderConnectionStatus(settings.apiBaseUrl, settings.extensionToken);
 }
 
-async function getActiveTabState(): Promise<TabState | null> {
+/** Popup always reflects the tab you opened it from — no cross-tab aggregation. */
+async function getThisTabState(): Promise<{ tabId: number; state: TabState | null } | null> {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) return null;
 
   try {
     await chrome.tabs.sendMessage(tab.id, { type: "REFRESH_SNAPSHOT" });
   } catch {
-    // Content script may not be injected on this page yet.
+    // Content script not injected on this page yet.
   }
 
-  const response = await chrome.runtime.sendMessage({
+  const state = (await chrome.runtime.sendMessage({
     type: "GET_TAB_STATE",
     tabId: tab.id,
-  });
+  })) as TabState | null;
 
-  return response as TabState | null;
+  return { tabId: tab.id, state };
 }
 
 function renderState(state: TabState | null, errorMessage?: string | null) {
@@ -73,7 +74,7 @@ function renderState(state: TabState | null, errorMessage?: string | null) {
   }
 
   if (!state) {
-    jobMatch.textContent = "No tab state yet.";
+    jobMatch.textContent = "No form detected on this tab yet.";
     fieldCount.textContent = "";
     fillButton.disabled = true;
     return;
@@ -86,9 +87,9 @@ function renderState(state: TabState | null, errorMessage?: string | null) {
   if (ready) {
     jobMatch.textContent = `Ready: ${state.job?.company ?? "Company"} — ${state.job?.role ?? "Role"}`;
   } else if (!hasForm) {
-    jobMatch.textContent = "No application form detected on this tab.";
+    jobMatch.textContent = "No application form on this tab.";
   } else {
-    jobMatch.textContent = state.matchHint ?? "Application form found, but no JD match for this URL.";
+    jobMatch.textContent = state.matchHint ?? "Form found, but no JD match for this URL.";
   }
 
   const selectCount = state.fields.filter(
@@ -103,12 +104,16 @@ function renderState(state: TabState | null, errorMessage?: string | null) {
 
 async function refresh() {
   try {
-    const state = await getActiveTabState();
-    renderState(state);
+    const tabInfo = await getThisTabState();
+    if (!tabInfo) {
+      renderState(null, "No active tab.");
+      return;
+    }
+    renderState(tabInfo.state);
   } catch (error) {
     const errorMessage =
       error instanceof Error && error.message.includes("Extension context invalidated")
-        ? "Extension was reloaded. Refresh this page, then reopen the popup."
+        ? "Extension was reloaded. Refresh this tab, then reopen the popup."
         : error instanceof Error
           ? error.message
           : "Could not read tab state.";
@@ -117,18 +122,19 @@ async function refresh() {
 }
 
 fillButton.addEventListener("click", async () => {
-  message.textContent = "Filling...";
+  message.textContent = "Filling this tab...";
   fillButton.disabled = true;
 
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab?.id) {
+  const tabInfo = await getThisTabState();
+  if (!tabInfo) {
     message.textContent = "No active tab.";
+    await refresh();
     return;
   }
 
   const response = await chrome.runtime.sendMessage({
     type: "FILL_TAB",
-    tabId: tab.id,
+    tabId: tabInfo.tabId,
   });
 
   if (response?.error) {
@@ -137,8 +143,8 @@ fillButton.addEventListener("click", async () => {
     const unmatched = (response?.unmatchedFieldIds as string[] | undefined) ?? [];
     message.textContent =
       unmatched.length > 0
-        ? `Filled tab. ${unmatched.length} fields still blank.`
-        : "Filled tab successfully.";
+        ? `Filled. ${unmatched.length} fields still blank.`
+        : "Filled successfully.";
   }
 
   await refresh();
