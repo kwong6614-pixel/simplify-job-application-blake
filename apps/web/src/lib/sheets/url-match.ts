@@ -16,12 +16,24 @@ const STRONG_SIGNATURE_PREFIXES = [
 const MIN_MATCH_SCORE = 80;
 
 export function normalizeSheetUrl(url: string): string {
-  const trimmed = url.trim();
+  const trimmed = url.replace(/\s+/g, " ").trim();
   if (!trimmed) return trimmed;
   if (!/^https?:\/\//i.test(trimmed)) {
     return `https://${trimmed}`;
   }
   return trimmed;
+}
+
+const ASHBY_JOB_UUID =
+  /\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
+
+export function extractAshbyJobUuid(url: string): string | null {
+  try {
+    const path = new URL(normalizeSheetUrl(url)).pathname;
+    return path.match(ASHBY_JOB_UUID)?.[1]?.toLowerCase() ?? null;
+  } catch {
+    return null;
+  }
 }
 
 function addGreenhouseSignatures(
@@ -76,8 +88,7 @@ function addAshbySignatures(parsed: URL, path: string, signatures: Set<string>):
     signatures.add(`ashby:job:${ashbyQueryId}`);
   }
 
-  const ashbyUuid =
-    path.match(/\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:\/|$)/i)?.[1];
+  const ashbyUuid = path.match(ASHBY_JOB_UUID)?.[1];
   if (ashbyUuid) {
     signatures.add(`ashby:job:${ashbyUuid.toLowerCase()}`);
   }
@@ -85,6 +96,11 @@ function addAshbySignatures(parsed: URL, path: string, signatures: Set<string>):
   const companySlug = path.match(/^\/([^/]+)\/([0-9a-f-]{36})/i);
   if (companySlug) {
     signatures.add(`ashby:${companySlug[1].toLowerCase()}:${companySlug[2].toLowerCase()}`);
+  }
+
+  const canonicalPath = path.replace(/\/application\/?$/i, "");
+  if (canonicalPath !== path && ashbyUuid) {
+    signatures.add(`ashby:job:${ashbyUuid.toLowerCase()}`);
   }
 }
 
@@ -121,9 +137,11 @@ export function getUrlMatchSignatures(url: string): Set<string> {
       }
     }
 
-    const leverId = path.match(
-      /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i,
-    )?.[1];
+    const leverId =
+      !host.includes("ashbyhq.com") &&
+      path.match(
+        /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i,
+      )?.[1];
     if (leverId) {
       signatures.add(`lever:job:${leverId.toLowerCase()}`);
     }
@@ -206,6 +224,12 @@ export function scoreUrlMatch(sheetUrl: string, applicationUrl: string): number 
     return 100;
   }
 
+  const sheetUuid = extractAshbyJobUuid(sheetUrl);
+  const appUuid = extractAshbyJobUuid(applicationUrl);
+  if (sheetUuid && appUuid && sheetUuid === appUuid) {
+    return 100;
+  }
+
   const sheetSignatures = getUrlMatchSignatures(sheetUrl);
   const appSignatures = getUrlMatchSignatures(applicationUrl);
 
@@ -249,7 +273,7 @@ export function getUrlSearchHints(url: string): string[] {
 
     const ashbyId =
       parsed.searchParams.get("ashby_jid") ||
-      path.match(/\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:\/|$)/i)?.[1];
+      path.match(ASHBY_JOB_UUID)?.[1];
     if (ashbyId) {
       hints.add(ashbyId);
       const ashbyCompany = path.match(/^\/([^/]+)\/[0-9a-f-]{36}/i)?.[1];

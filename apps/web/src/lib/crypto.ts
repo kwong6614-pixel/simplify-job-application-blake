@@ -34,13 +34,30 @@ const PRESERVED_URL_PARAMS = [
   "selected_job_id",
 ] as const;
 
+function isAshbyHost(hostname: string): boolean {
+  return hostname.includes("ashbyhq.com");
+}
+
+/** Ashby listing and /application URLs refer to the same posting. */
+export function canonicalAshbyPathname(pathname: string): string {
+  let path = pathname.replace(/\/+$/, "");
+  if (!path) path = "/";
+  if (/\/application$/i.test(path)) {
+    path = path.replace(/\/application$/i, "") || "/";
+  }
+  return path.toLowerCase();
+}
+
 export function normalizeUrl(url: string): string {
   try {
-    const parsed = new URL(url);
+    const parsed = new URL(url.trim());
     parsed.hash = "";
+    const host = parsed.hostname.replace(/^www\./i, "").toLowerCase();
 
     const kept = new URLSearchParams();
     for (const key of PRESERVED_URL_PARAMS) {
+      // jr_id on Ashby pages is usually a Jobright/tracker param, not the job id.
+      if (isAshbyHost(host) && key === "jr_id") continue;
       const value = parsed.searchParams.get(key)?.trim();
       if (value) {
         kept.set(key, value.toLowerCase());
@@ -50,12 +67,13 @@ export function normalizeUrl(url: string): string {
     const sorted = [...kept.entries()].sort(([a], [b]) => a.localeCompare(b));
     parsed.search = sorted.length > 0 ? `?${new URLSearchParams(sorted).toString()}` : "";
 
-    let pathname = parsed.pathname.replace(/\/+$/, "");
-    if (!pathname) pathname = "/";
-    parsed.pathname = pathname;
+    parsed.pathname = isAshbyHost(host)
+      ? canonicalAshbyPathname(parsed.pathname)
+      : parsed.pathname.replace(/\/+$/, "") || "/";
+
     return parsed.toString().toLowerCase();
   } catch {
-    return url.trim().toLowerCase();
+    return url.replace(/\s+/g, " ").trim().toLowerCase();
   }
 }
 

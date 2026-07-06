@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { normalizeUrl, sheetRowHash } from "@/lib/crypto";
 import { getGoogleSheetEnvConfig } from "@/lib/sheets/config";
 import {
+  extractAshbyJobUuid,
   getUrlSearchHints,
   MIN_MATCH_SCORE,
   normalizeSheetUrl,
@@ -256,6 +257,31 @@ export async function matchJobByUrl(userId: string, url: string) {
     where: { userId, urlNormalized: normalized },
   });
   if (exact) return exact;
+
+  const ashbyUuid = extractAshbyJobUuid(url);
+  if (ashbyUuid) {
+    const ashbyCandidates = await prisma.sheetJob.findMany({
+      where: {
+        userId,
+        url: { contains: ashbyUuid, mode: "insensitive" },
+      },
+      orderBy: { syncedAt: "desc" },
+      take: 20,
+    });
+
+    let bestAshby: (typeof ashbyCandidates)[number] | null = null;
+    let bestAshbyScore = 0;
+    for (const job of ashbyCandidates) {
+      const score = scoreUrlMatch(job.url, url);
+      if (score > bestAshbyScore) {
+        bestAshbyScore = score;
+        bestAshby = job;
+      }
+    }
+    if (bestAshby && bestAshbyScore >= MIN_MATCH_SCORE) {
+      return bestAshby;
+    }
+  }
 
   const hints = getUrlSearchHints(url);
   const candidateJobs =

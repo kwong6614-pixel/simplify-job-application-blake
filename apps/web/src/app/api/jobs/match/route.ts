@@ -3,7 +3,7 @@ import { auth } from "@/auth";
 import { getUserFromExtensionToken } from "@/lib/auth/extension";
 import { prisma } from "@/lib/db";
 import { normalizeUrl } from "@/lib/crypto";
-import { MIN_MATCH_SCORE, scoreUrlMatch } from "@/lib/sheets/url-match";
+import { extractAshbyJobUuid, MIN_MATCH_SCORE, scoreUrlMatch } from "@/lib/sheets/url-match";
 import { ensureSheetSyncedForUser } from "@/lib/sheets/auto-sync";
 import { matchJobByUrl, rememberApplicationUrl } from "@/lib/sheets/google";
 
@@ -40,14 +40,19 @@ export async function GET(request: Request) {
   const job = await matchJobByUrl(userId, url);
 
   if (!job) {
+    const ashbyUuid = extractAshbyJobUuid(url);
+    const hint =
+      syncedJobCount === 0
+        ? "No sheet jobs synced yet. Check Google Sheet env vars on the server."
+        : ashbyUuid
+          ? `No sheet row matched this Ashby job (${ashbyUuid.slice(0, 8)}…). Force sync on Dashboard and confirm column E contains this Ashby URL (listing or /application both work).`
+          : "This URL is not in your synced sheet rows. Confirm column E matches this job posting URL.";
+
     return NextResponse.json({
       matched: false,
       job: null,
       syncedJobCount,
-      hint:
-        syncedJobCount === 0
-          ? "No sheet jobs synced yet. Check Google Sheet env vars on the server."
-          : "This URL is not in your synced sheet rows. Confirm column E matches this Greenhouse job.",
+      hint,
     });
   }
 

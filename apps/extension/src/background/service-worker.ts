@@ -109,6 +109,14 @@ async function enrichAndStoreTabState(tabId: number, snapshot: FormSnapshot) {
         : "Could not look up JD match. Check extension token and API URL.";
   }
 
+  if (!state.matched && state.fields.length > 0) {
+    state.matchHint =
+      state.matchHint ??
+      "Application form detected, but no sheet row matched this URL. Force sync on Dashboard.";
+  } else if (state.fields.length === 0 && snapshot.atsPlatform === "ashby") {
+    state.matchHint = "Waiting for Ashby application form to load…";
+  }
+
   tabStates.set(tabId, state);
   const nowReady = isTabReady(state);
   setTabEnabled(tabId, nowReady);

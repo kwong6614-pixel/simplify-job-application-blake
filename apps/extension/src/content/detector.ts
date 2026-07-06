@@ -19,6 +19,8 @@ let fillInProgress = false;
 let contentScriptStopped = false;
 let lastSnapshotFingerprint = "";
 let publishInProgress = false;
+let emptyFieldRetries = 0;
+const MAX_EMPTY_FIELD_RETRIES = 8;
 
 const observer = new MutationObserver(schedulePublish);
 
@@ -60,6 +62,22 @@ function schedulePublish() {
   }, 800);
 }
 
+function shouldRetryEmptyFields(fields: FormField[], atsPlatform: string): boolean {
+  if (fields.length > 0) return false;
+  if (emptyFieldRetries >= MAX_EMPTY_FIELD_RETRIES) return false;
+
+  const href = window.location.href.toLowerCase();
+  if (atsPlatform === "ashby" && href.includes("ashbyhq.com") && href.includes("/application")) {
+    return true;
+  }
+
+  if (href.includes("greenhouse.io") && (href.includes("job_app") || href.includes("/jobs/"))) {
+    return true;
+  }
+
+  return false;
+}
+
 async function publishSnapshot() {
   if (contentScriptStopped || fillInProgress || publishInProgress || !shouldActivateContentScript()) {
     return;
@@ -71,19 +89,30 @@ async function publishSnapshot() {
   try {
     clearComboboxRegistry();
     const fields = await collectFields();
+    const atsPlatform = getAtsPlatform();
     const fingerprint = fingerprintFields(fields);
 
     if (fingerprint === lastSnapshotFingerprint) {
+      if (shouldRetryEmptyFields(fields, atsPlatform)) {
+        emptyFieldRetries += 1;
+        lastSnapshotFingerprint = "";
+        window.setTimeout(() => {
+          schedulePublish();
+        }, 1500);
+      }
       return;
     }
 
     lastSnapshotFingerprint = fingerprint;
+    if (fields.length > 0) {
+      emptyFieldRetries = 0;
+    }
 
     const snapshot: FormSnapshot = {
       url: window.location.href,
       title: document.title,
       fields,
-      atsPlatform: getAtsPlatform(),
+      atsPlatform,
     };
 
     const sent = await safeSendRuntimeMessage({

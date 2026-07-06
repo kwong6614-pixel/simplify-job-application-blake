@@ -18,10 +18,12 @@ const APPLICATION_ROOT_SELECTORS = [
   "[class*='JobApplication']",
   "[class*='ApplicationForm']",
   "[class*='application-form']",
+  "[class*='JobPosting']",
+  "[class*='jobPosting']",
   "form[action*='ashbyhq.com']",
-  "form",
-  "main",
 ];
+
+const FALLBACK_ROOT_SELECTORS = ["form", "main"];
 
 const FIELD_CONTAINER_SELECTORS = [
   "[class*='FieldEntry']",
@@ -112,8 +114,21 @@ function collectControl(
   fields.push(toFormField(input, getAshbyLabel(fieldRoot, input), fields.length));
 }
 
+function isAshbyApplicationPage(): boolean {
+  return /\/application\/?(\?|#|$)/i.test(`${window.location.pathname}${window.location.search}`);
+}
+
 function findApplicationRoot(document: Document): Element {
   for (const selector of APPLICATION_ROOT_SELECTORS) {
+    const element = document.querySelector(selector);
+    if (element) return element;
+  }
+
+  if (isAshbyApplicationPage()) {
+    return document.body;
+  }
+
+  for (const selector of FALLBACK_ROOT_SELECTORS) {
     const element = document.querySelector(selector);
     if (element) return element;
   }
