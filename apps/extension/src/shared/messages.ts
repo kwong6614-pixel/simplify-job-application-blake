@@ -23,24 +23,33 @@ export interface FormField {
   options?: FormFieldOption[];
 }
 
-export interface TabState {
+export interface FormSnapshot {
   url: string;
   title: string;
+  fields: FormField[];
+  atsPlatform: string;
+}
+
+export interface TabState extends FormSnapshot {
   matched: boolean;
   matchHint?: string;
   job?: {
     company: string;
     role: string;
   };
-  fields: FormField[];
-  atsPlatform: string;
+}
+
+/** Ready when this tab has an application form and a matched JD. */
+export function isTabReady(state: TabState | null | undefined): boolean {
+  return Boolean(state && state.fields.length > 0 && state.matched);
 }
 
 export type RuntimeMessage =
   | { type: "GET_TAB_STATE"; tabId?: number }
-  | { type: "TAB_FORM_SNAPSHOT"; tabId: number; snapshot: TabState }
+  | { type: "TAB_FORM_SNAPSHOT"; snapshot: FormSnapshot }
   | { type: "FILL_TAB"; tabId: number }
-  | { type: "APPLY_FILL"; values: Record<string, string> };
+  | { type: "APPLY_FILL"; values: Record<string, string> }
+  | { type: "REFRESH_SNAPSHOT" };
 
 import {
   isRuntimeAvailable,

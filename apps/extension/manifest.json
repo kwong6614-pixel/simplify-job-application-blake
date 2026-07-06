@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "JobApply Autofill",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Fill US ATS job application forms from your profile and Google Sheet JDs.",
   "permissions": ["storage", "tabs", "activeTab"],
   "host_permissions": ["http://localhost:3000/*", "https://*/*"],

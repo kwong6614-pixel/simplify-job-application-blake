@@ -1,4 +1,4 @@
-import { getSettings, type TabState } from "../shared/messages";
+import { getSettings, isTabReady, type TabState } from "../shared/messages";
 
 const apiBaseUrlInput = document.getElementById("apiBaseUrl") as HTMLInputElement;
 const extensionTokenInput = document.getElementById("extensionToken") as HTMLInputElement;
@@ -50,7 +50,11 @@ async function getActiveTabState(): Promise<TabState | null> {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) return null;
 
-  await chrome.tabs.sendMessage(tab.id, { type: "REFRESH_SNAPSHOT" }).catch(() => undefined);
+  try {
+    await chrome.tabs.sendMessage(tab.id, { type: "REFRESH_SNAPSHOT" });
+  } catch {
+    // Content script may not be injected on this page yet.
+  }
 
   const response = await chrome.runtime.sendMessage({
     type: "GET_TAB_STATE",
@@ -75,16 +79,26 @@ function renderState(state: TabState | null, errorMessage?: string | null) {
     return;
   }
 
-  jobMatch.textContent = state.matched
-    ? `Matched: ${state.job?.company ?? "Unknown company"} — ${state.job?.role ?? "Role"}`
-    : state.matchHint ?? "No JD match for this URL yet.";
+  const hasForm = state.fields.length > 0;
+  const hasJd = state.matched;
+  const ready = isTabReady(state);
+
+  if (ready) {
+    jobMatch.textContent = `Ready: ${state.job?.company ?? "Company"} — ${state.job?.role ?? "Role"}`;
+  } else if (!hasForm) {
+    jobMatch.textContent = "No application form detected on this tab.";
+  } else {
+    jobMatch.textContent = state.matchHint ?? "Application form found, but no JD match for this URL.";
+  }
 
   const selectCount = state.fields.filter(
     (field) => field.type === "select" || field.type === "combobox",
   ).length;
   const textCount = state.fields.length - selectCount;
-  fieldCount.textContent = `${state.fields.length} fields detected (${textCount} text, ${selectCount} dropdown/combobox) on ${state.atsPlatform}.`;
-  fillButton.disabled = state.fields.length === 0;
+  fieldCount.textContent = hasForm
+    ? `${state.fields.length} fields (${textCount} text, ${selectCount} dropdown) on ${state.atsPlatform}. JD: ${hasJd ? "found" : "not found"}.`
+    : "";
+  fillButton.disabled = !ready;
 }
 
 async function refresh() {

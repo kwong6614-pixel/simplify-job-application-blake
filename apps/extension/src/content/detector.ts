@@ -1,4 +1,4 @@
-import { apiFetch, type TabState } from "../shared/messages";
+import { type FormSnapshot } from "../shared/messages";
 import {
   isExtensionContextInvalidated,
   isRuntimeAvailable,
@@ -10,7 +10,6 @@ import { clearComboboxRegistry } from "./ats/combobox-registry";
 
 let publishTimer: number | undefined;
 let lastFields: Awaited<ReturnType<typeof collectFields>> = [];
-let collectInFlight = false;
 let contentScriptStopped = false;
 
 const observer = new MutationObserver(schedulePublish);
@@ -49,60 +48,23 @@ async function publishSnapshot() {
     return;
   }
 
-  if (collectInFlight) return;
-  collectInFlight = true;
+  clearComboboxRegistry();
+  const fields = await collectFields();
+  lastFields = fields;
 
-  try {
-    clearComboboxRegistry();
-    const fields = await collectFields();
-    lastFields = fields;
+  const snapshot: FormSnapshot = {
+    url: window.location.href,
+    title: document.title,
+    fields,
+    atsPlatform: getAtsPlatform(),
+  };
 
-    const snapshot: TabState = {
-      url: window.location.href,
-      title: document.title,
-      matched: false,
-      fields,
-      atsPlatform: getAtsPlatform(),
-    };
-
-    try {
-      const match = await apiFetch(`/api/jobs/match?url=${encodeURIComponent(snapshot.url)}`);
-      snapshot.matched = Boolean(match.matched);
-      if (match.job) {
-        snapshot.job = {
-          company: match.job.company,
-          role: match.job.role,
-        };
-      } else if (match.hint) {
-        snapshot.matchHint = match.hint;
-      }
-    } catch (error) {
-      snapshot.matched = false;
-      if (isExtensionContextInvalidated(error)) {
-        stopContentScript();
-        return;
-      }
-      snapshot.matchHint =
-        error instanceof Error
-          ? error.message
-          : "Could not look up JD match. Check extension token and API URL.";
-    }
-
-    const sent = await safeSendRuntimeMessage({
-      type: "TAB_FORM_SNAPSHOT",
-      snapshot,
-    });
-    if (!sent) {
-      stopContentScript();
-    }
-  } catch (error) {
-    if (isExtensionContextInvalidated(error)) {
-      stopContentScript();
-      return;
-    }
-    console.error("[jobapply] Failed to publish snapshot", error);
-  } finally {
-    collectInFlight = false;
+  const sent = await safeSendRuntimeMessage({
+    type: "TAB_FORM_SNAPSHOT",
+    snapshot,
+  });
+  if (!sent) {
+    stopContentScript();
   }
 }
 
