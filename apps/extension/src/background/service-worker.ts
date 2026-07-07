@@ -137,6 +137,12 @@ async function enrichAndStoreTabState(tabId: number, snapshot: FormSnapshot) {
       "Application form detected, but no sheet row matched this URL. Force sync on Dashboard.";
   } else if (state.fields.length === 0 && snapshot.atsPlatform === "ashby") {
     state.matchHint = "Waiting for Ashby application form to load…";
+  } else if (state.fields.length === 0 && snapshot.atsPlatform === "workable") {
+    state.matchHint = "Waiting for Workable application form to load…";
+  } else if (state.fields.length === 0 && snapshot.atsPlatform === "rippling") {
+    state.matchHint = "Waiting for Rippling application form to load…";
+  } else if (state.fields.length === 0 && snapshot.atsPlatform === "gusto") {
+    state.matchHint = "Waiting for Gusto application form to load…";
   }
 
   tabStates.set(tabId, state);

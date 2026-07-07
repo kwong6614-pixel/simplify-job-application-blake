@@ -80,6 +80,26 @@ function shouldRetryEmptyFields(fields: FormField[], atsPlatform: string): boole
     return true;
   }
 
+  if (
+    atsPlatform === "workable" &&
+    href.includes("workable.com") &&
+    (href.includes("/apply") || href.includes("/j/"))
+  ) {
+    return true;
+  }
+
+  if (atsPlatform === "rippling" && href.includes("rippling.com") && href.includes("/apply")) {
+    return true;
+  }
+
+  if (
+    atsPlatform === "gusto" &&
+    href.includes("gusto.com") &&
+    href.includes("/applicants/")
+  ) {
+    return true;
+  }
+
   return false;
 }
 

@@ -2,7 +2,7 @@ import type { FormField } from "../../shared/messages";
 import { getAtsAdapter } from "./ats";
 import { getCombobox } from "./ats/combobox-registry";
 import { applyComboboxValue, resolveComboboxTrigger, sleep } from "./ats/combobox";
-import { applySelectValue } from "./ats/shared";
+import { applySelectValue, applyRadioGroupValue } from "./ats/shared";
 
 export function applyControlValue(element: HTMLElement, value: string): boolean {
   if (element.tagName.toLowerCase() === "select") {
@@ -39,8 +39,14 @@ export async function applyFill(values: Record<string, string>, fields: FormFiel
 
   for (const [id, value, meta] of syncFields) {
     const element = adapter.resolveElement(id, meta.label);
-    if (!element) continue;
-    applyControlValue(element, value);
+    if (element) {
+      applyControlValue(element, value);
+      continue;
+    }
+
+    if (meta.type === "select") {
+      applyRadioGroupValue(document, id, value, meta.options);
+    }
   }
 
   for (const [id, value, meta] of comboboxFields) {

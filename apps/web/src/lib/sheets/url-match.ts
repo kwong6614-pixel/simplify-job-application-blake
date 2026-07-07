@@ -9,6 +9,9 @@ const STRONG_SIGNATURE_PREFIXES = [
   "workday:job:",
   "linkedin:job:",
   "smartrecruiters:job:",
+  "workable:job:",
+  "rippling:job:",
+  "gusto:posting:",
   "numeric-job:",
   "path-job:",
 ] as const;
@@ -82,6 +85,30 @@ function addGreenhouseSignatures(
   }
 }
 
+function addWorkableSignatures(parsed: URL, path: string, signatures: Set<string>): void {
+  const shortcode = path.match(/\/j\/([a-z0-9]+)/i)?.[1];
+  if (shortcode) {
+    signatures.add(`workable:job:${shortcode.toUpperCase()}`);
+    signatures.add(`path-job:${shortcode.toLowerCase()}`);
+  }
+}
+
+function addRipplingSignatures(path: string, signatures: Set<string>): void {
+  const jobId = path.match(/\/jobs\/([0-9a-f-]{36})/i)?.[1];
+  if (jobId) {
+    signatures.add(`rippling:job:${jobId.toLowerCase()}`);
+    signatures.add(`path-job:${jobId.toLowerCase()}`);
+  }
+}
+
+function addGustoSignatures(path: string, signatures: Set<string>): void {
+  const postingUuid = path.match(ASHBY_JOB_UUID)?.[1];
+  if (postingUuid) {
+    signatures.add(`gusto:posting:${postingUuid.toLowerCase()}`);
+    signatures.add(`path-job:${postingUuid.toLowerCase()}`);
+  }
+}
+
 function addAshbySignatures(parsed: URL, path: string, signatures: Set<string>): void {
   const ashbyQueryId = parsed.searchParams.get("ashby_jid")?.trim().toLowerCase();
   if (ashbyQueryId) {
@@ -137,8 +164,20 @@ export function getUrlMatchSignatures(url: string): Set<string> {
       }
     }
 
+    if (host.includes("workable.com")) {
+      addWorkableSignatures(parsed, path, signatures);
+    }
+
+    if (host.includes("rippling.com")) {
+      addRipplingSignatures(path, signatures);
+    }
+
+    if (host.includes("gusto.com")) {
+      addGustoSignatures(path, signatures);
+    }
+
     const leverId =
-      !host.includes("ashbyhq.com") &&
+      host.includes("lever.co") &&
       path.match(
         /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i,
       )?.[1];
@@ -201,7 +240,10 @@ function scoreSharedSignature(signature: string): number {
     signature.startsWith("lever:job:") ||
     signature.startsWith("workday:job:") ||
     signature.startsWith("linkedin:job:") ||
-    signature.startsWith("smartrecruiters:job:")
+    signature.startsWith("smartrecruiters:job:") ||
+    signature.startsWith("workable:job:") ||
+    signature.startsWith("rippling:job:") ||
+    signature.startsWith("gusto:posting:")
   ) {
     return 90;
   }
@@ -251,6 +293,7 @@ export function getUrlSearchHints(url: string): string[] {
 
   try {
     const parsed = new URL(normalizeSheetUrl(url));
+    const host = parsed.hostname.replace(/^www\./i, "").toLowerCase();
     const path = parsed.pathname.replace(/\/+$/, "").toLowerCase();
 
     const forSlug = parsed.searchParams.get("for");
@@ -282,10 +325,28 @@ export function getUrlSearchHints(url: string): string[] {
       }
     }
 
-    const leverId = path.match(
-      /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i,
-    )?.[1];
+    const leverId =
+      host.includes("lever.co") &&
+      path.match(
+        /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i,
+      )?.[1];
     if (leverId) hints.add(leverId);
+
+    const workableId = path.match(/\/j\/([a-z0-9]+)/i)?.[1];
+    if (workableId && host.includes("workable.com")) {
+      hints.add(workableId);
+      hints.add(workableId.toUpperCase());
+    }
+
+    const ripplingId = path.match(/\/jobs\/([0-9a-f-]{36})/i)?.[1];
+    if (ripplingId && host.includes("rippling.com")) {
+      hints.add(ripplingId);
+    }
+
+    const gustoId = path.match(ASHBY_JOB_UUID)?.[1];
+    if (gustoId && host.includes("gusto.com")) {
+      hints.add(gustoId);
+    }
 
     const workdayId =
       parsed.searchParams.get("jobPostingId") ||
@@ -296,6 +357,10 @@ export function getUrlSearchHints(url: string): string[] {
     const lastSegment = path.split("/").filter(Boolean).pop();
     if (lastSegment && /^\d{6,}$/.test(lastSegment)) {
       hints.add(lastSegment);
+    }
+    if (lastSegment && /^[a-z0-9]{8,}$/i.test(lastSegment) && host.includes("workable.com")) {
+      hints.add(lastSegment);
+      hints.add(lastSegment.toUpperCase());
     }
   } catch {
     hints.add(url.trim());

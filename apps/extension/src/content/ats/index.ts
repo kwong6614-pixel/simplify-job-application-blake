@@ -1,3 +1,6 @@
+import { gustoAdapter } from "./gusto";
+import { ripplingAdapter } from "./rippling";
+import { workableAdapter } from "./workable";
 import { ashbyAdapter, isAshbyEmbedOnCustomDomain } from "./ashby";
 import { genericAdapter } from "./generic";
 import { greenhouseAdapter } from "./greenhouse";
@@ -12,6 +15,9 @@ const HOST_ADAPTERS: AtsAdapter[] = [
   ashbyAdapter,
   workdayAdapter,
   smartRecruitersAdapter,
+  workableAdapter,
+  ripplingAdapter,
+  gustoAdapter,
 ];
 
 export function getAtsAdapter(hostname: string, url: string, document?: Document): AtsAdapter {

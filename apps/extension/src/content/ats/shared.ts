@@ -271,6 +271,156 @@ export function dedupeFields(fields: FormField[]): FormField[] {
   return result;
 }
 
+const LABEL_NOISE = /\s*(clear selection|add comment|optional)\s*$/i;
+
+export function getQuestionLabelFromRoot(fieldRoot: Element, control?: HTMLElement): string {
+  const labelSelectors = [
+    "label",
+    "legend",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "[data-ui='form-field-label']",
+    "[class*='label']",
+    "[class*='Label']",
+    "[class*='question']",
+    "[class*='Question']",
+    "[class*='title']",
+    "[class*='Title']",
+  ].join(", ");
+
+  let best = "";
+  for (const candidate of fieldRoot.querySelectorAll(labelSelectors)) {
+    if (control && candidate.contains(control) && candidate !== control) continue;
+    const text = candidate.textContent?.replace(/\s+/g, " ").trim() ?? "";
+    if (!text || text.length > 500) continue;
+    if (text.length > best.length) best = text;
+  }
+
+  if (best) {
+    return best.replace(LABEL_NOISE, "").trim();
+  }
+
+  if (control) {
+    return resolveControlLabel(
+      control as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement,
+    );
+  }
+
+  return "Unknown field";
+}
+
+export function collectRadioGroupsFromRoot(
+  root: Element,
+  getLabel: (fieldRoot: Element, groupName: string) => string,
+  shouldSkipRoot?: (root: Element) => boolean,
+): FormField[] {
+  const groups = new Map<string, HTMLInputElement[]>();
+
+  for (const input of root.querySelectorAll('input[type="radio"]')) {
+    const radio = input as HTMLInputElement;
+    if (radio.disabled || !isVisible(radio)) continue;
+    if (!radio.name) continue;
+
+    const fieldRoot = radio.closest(
+      "fieldset, [data-ui='form-field'], [class*='Field'], [class*='field'], [class*='Question'], [class*='question'], li, div",
+    );
+    if (fieldRoot && shouldSkipRoot?.(fieldRoot)) continue;
+
+    const existing = groups.get(radio.name) ?? [];
+    existing.push(radio);
+    groups.set(radio.name, existing);
+  }
+
+  const fields: FormField[] = [];
+
+  for (const [name, radios] of groups) {
+    const fieldRoot =
+      radios[0].closest(
+        "fieldset, [data-ui='form-field'], [class*='Field'], [class*='field'], [class*='Question'], [class*='question'], li, div",
+      ) ?? radios[0].parentElement ?? root;
+
+    const options = radios.map((radio) => {
+      const labelEl =
+        radio.id
+          ? root.ownerDocument.querySelector(`label[for="${CSS.escape(radio.id)}"]`)
+          : null;
+      const label =
+        labelEl?.textContent?.replace(/\s+/g, " ").trim() ||
+        radio.getAttribute("aria-label") ||
+        radio.value;
+      return { value: radio.value, label };
+    });
+
+    fields.push({
+      id: name,
+      label: getLabel(fieldRoot, name),
+      type: "select",
+      required: radios.some((radio) => radio.required),
+      options,
+      currentValue: radios.find((radio) => radio.checked)?.value,
+    });
+  }
+
+  return fields;
+}
+
+export function applyRadioGroupValue(
+  document: Document,
+  groupName: string,
+  desired: string,
+  options?: FormFieldOption[],
+): boolean {
+  const radios = Array.from(
+    document.querySelectorAll<HTMLInputElement>(
+      `input[type="radio"][name="${CSS.escape(groupName)}"]`,
+    ),
+  ).filter((radio) => !radio.disabled && isVisible(radio));
+
+  if (radios.length === 0) return false;
+
+  const target = normalize(desired);
+  let bestRadio: HTMLInputElement | null = null;
+  let bestScore = 0;
+
+  for (const radio of radios) {
+    const labelEl = radio.id
+      ? document.querySelector(`label[for="${CSS.escape(radio.id)}"]`)
+      : null;
+    const label = normalize(labelEl?.textContent ?? radio.getAttribute("aria-label") ?? "");
+    const value = normalize(radio.value);
+    let score = 0;
+
+    if (label === target || value === target) score = 100;
+    else if (label.includes(target) || target.includes(label)) score = 80;
+    else if (value.includes(target) || target.includes(value)) score = 70;
+
+    if (options?.length) {
+      for (const option of options) {
+        const optionLabel = normalize(option.label);
+        const optionValue = normalize(option.value);
+        if (optionLabel === target || optionValue === target) {
+          if (label === optionLabel || value === optionValue) score = Math.max(score, 95);
+        }
+      }
+    }
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestRadio = radio;
+    }
+  }
+
+  if (!bestRadio || bestScore < 40) return false;
+
+  bestRadio.click();
+  bestRadio.dispatchEvent(new Event("input", { bubbles: true }));
+  bestRadio.dispatchEvent(new Event("change", { bubbles: true }));
+  return true;
+}
+
 export function collectControlsFromRoots(
   roots: Element[],
   getLabel: (root: Element, control: HTMLElement) => string,
