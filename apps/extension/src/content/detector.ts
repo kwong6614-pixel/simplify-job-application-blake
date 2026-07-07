@@ -28,10 +28,10 @@ function fingerprintFields(fields: FormField[]): string {
   return JSON.stringify(
     fields.map((field) => ({
       id: field.id,
-      label: field.label,
       type: field.type,
       required: field.required,
-      optionCount: field.options?.length ?? 0,
+      // Combobox option lists can fluctuate in the DOM without real form changes.
+      hasOptions: Boolean(field.options?.length),
     })),
   );
 }

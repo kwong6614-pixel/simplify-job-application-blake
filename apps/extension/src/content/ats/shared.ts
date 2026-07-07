@@ -271,36 +271,40 @@ export function dedupeFields(fields: FormField[]): FormField[] {
   return result;
 }
 
-const LABEL_NOISE = /\s*(clear selection|add comment|optional)\s*$/i;
+const LABEL_NOISE = /\s*(clear selection|add comment|optional|\*)\s*$/gi;
+
+function cleanLabel(text: string): string {
+  return text.replace(/\s+/g, " ").replace(LABEL_NOISE, "").trim();
+}
 
 export function getQuestionLabelFromRoot(fieldRoot: Element, control?: HTMLElement): string {
-  const labelSelectors = [
-    "label",
-    "legend",
-    "h1",
-    "h2",
+  if (control) {
+    const forLabel = labelFromForAttribute(control);
+    if (forLabel) return cleanLabel(forLabel);
+  }
+
+  const directLabel =
+    fieldRoot.querySelector(":scope > label") ??
+    fieldRoot.querySelector("label") ??
+    fieldRoot.querySelector("legend");
+
+  if (directLabel?.textContent?.trim()) {
+    const text = cleanLabel(directLabel.textContent);
+    if (text.length > 0 && text.length <= 300) return text;
+  }
+
+  for (const selector of [
+    "[data-ui='form-field-label']",
+    "[class*='question']",
+    "[class*='Question']",
     "h3",
     "h4",
     "h5",
-    "[data-ui='form-field-label']",
-    "[class*='label']",
-    "[class*='Label']",
-    "[class*='question']",
-    "[class*='Question']",
-    "[class*='title']",
-    "[class*='Title']",
-  ].join(", ");
-
-  let best = "";
-  for (const candidate of fieldRoot.querySelectorAll(labelSelectors)) {
-    if (control && candidate.contains(control) && candidate !== control) continue;
-    const text = candidate.textContent?.replace(/\s+/g, " ").trim() ?? "";
-    if (!text || text.length > 500) continue;
-    if (text.length > best.length) best = text;
-  }
-
-  if (best) {
-    return best.replace(LABEL_NOISE, "").trim();
+  ]) {
+    const candidate = fieldRoot.querySelector(selector);
+    if (!candidate?.textContent?.trim()) continue;
+    const text = cleanLabel(candidate.textContent);
+    if (text.length > 0 && text.length <= 300) return text;
   }
 
   if (control) {
@@ -325,7 +329,7 @@ export function collectRadioGroupsFromRoot(
     if (!radio.name) continue;
 
     const fieldRoot = radio.closest(
-      "fieldset, [data-ui='form-field'], [class*='Field'], [class*='field'], [class*='Question'], [class*='question'], li, div",
+      "fieldset, [data-ui='form-field'], [class*='Question'], [class*='question'], [data-testid*='field']",
     );
     if (fieldRoot && shouldSkipRoot?.(fieldRoot)) continue;
 
@@ -339,7 +343,7 @@ export function collectRadioGroupsFromRoot(
   for (const [name, radios] of groups) {
     const fieldRoot =
       radios[0].closest(
-        "fieldset, [data-ui='form-field'], [class*='Field'], [class*='field'], [class*='Question'], [class*='question'], li, div",
+        "fieldset, [data-ui='form-field'], [class*='Question'], [class*='question'], [data-testid*='field']",
       ) ?? radios[0].parentElement ?? root;
 
     const options = radios.map((radio) => {
